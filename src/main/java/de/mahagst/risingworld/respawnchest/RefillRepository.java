@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import net.risingworld.api.database.Database;
 
+/** SQLite persistence for registered chests and their slot-exact item templates. */
 final class RefillRepository {
 	private final Database database;
 
@@ -17,6 +18,7 @@ final class RefillRepository {
 	void createSchema() {
 		database.execute("PRAGMA foreign_keys = ON");
 		// Prefer a single-file DB so refill.db alone is inspectable/backupable.
+		// DELETE so a copied refill.db alone is complete; write load is tiny.
 		database.execute("PRAGMA journal_mode=DELETE");
 		database.execute("""
 				CREATE TABLE IF NOT EXISTS refill_chests (
@@ -127,6 +129,7 @@ final class RefillRepository {
 		replaceItems(chest.storageId(), items);
 	}
 
+	/** Replace the whole template; used by /make-refill insert path and /refill-update. */
 	void replaceItems(long storageId, List<TemplateItem> items) {
 		var deleteSql = "DELETE FROM refill_items WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(deleteSql)) {
@@ -163,6 +166,7 @@ final class RefillRepository {
 		}
 	}
 
+	/** null next_refill means idle (no timer pending). */
 	void setNextRefill(long storageId, Long nextRefill) {
 		var sql = "UPDATE refill_chests SET next_refill = ? WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {
@@ -178,6 +182,7 @@ final class RefillRepository {
 		}
 	}
 
+	/** CASCADE deletes refill_items via FK. */
 	void delete(long storageId) {
 		var sql = "DELETE FROM refill_chests WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {

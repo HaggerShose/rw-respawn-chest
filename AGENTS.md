@@ -1,92 +1,92 @@
 # AGENTS.md -- rw-respawn-chest
 
-Rising-World-Serverplugin (Unity-API **0.9.3**): Admin peilt eine platzierte Kiste an, speichert ihren Inhalt als Template. Nach Loot-Entnahme startet ein einmaliger Timer; danach wird die Kiste per **RESET** wiederhergestellt.
+Rising World server plugin (Unity API **0.9.3**): an admin looks at a placed chest and saves its contents as a template. After loot is taken, a one-shot timer starts; when it fires the chest is restored via **RESET**.
 
-Chat auf Deutsch. Code, Identifier, Commits auf Englisch. ASCII-Satzzeichen in Dateien (`--`, `...`, `->`); deutsche Umlaute in Prosa sind ok.
+Chat with the user in German. Code, identifiers, and commits in English. ASCII punctuation in files (`--`, `...`, `->`); German umlauts in prose are fine.
 
-Javadoc: lokal unter `RisingWorld/Data/SDK`, online unter <https://javadoc.rising-world.net/latest/>
+Javadoc: local under `RisingWorld/Data/SDK`, online at <https://javadoc.rising-world.net/latest/>
 
-## Wunschablauf (v1)
+## Desired flow (v1)
 
 ```text
-1. Admin platziert normale Kiste, legt Items hinein
-2. Admin schaut die Kiste an
+1. Admin places a normal chest and fills it
+2. Admin looks at the chest
 3. /make-refill 60
-4. Plugin speichert Storage/Object-ID + Chunk + Position + Typ + creation_date + Snapshot + Intervall
-5. Spieler nimmt Loot aus der Kiste (ins Inventar oder Drop auf den Boden)
-6. Plugin startet einmaligen Timer (sofern keiner pending ist)
-7. Timer abgelaufen -> Identity-Check -> RESET (clear + Template slotgenau)
+4. Plugin stores storage/object id + chunk + position + type + creation_date + snapshot + interval
+5. Player takes loot from the chest (into inventory or drop to ground)
+6. Plugin starts a one-shot timer (if none is pending)
+7. Timer fires -> identity check -> RESET (clear + template slot-exact)
 ```
 
-Kein dauerhaft tickender Poll. Idle-Kisten kosten praktisch nichts. Spieler brauchen nichts zu installieren.
+No continuous poll. Idle chests cost almost nothing. Players install nothing.
 
 ## Commands (v1)
 
-Nur Admins: `player.isAdmin()` (`Server_Admins` in `server.properties`). Sonst still ignorieren (keine Antwort, Event nicht canceln).
+Admins only: `player.isAdmin()` (`Server_Admins` in `server.properties`). Otherwise ignore silently (no reply, do not cancel the event).
 
-Admin-Commands antworten nur dem ausfuehrenden Admin. Auto-RESET ist still (keine Chat-Nachrichten).
+Admin commands reply only to the executing admin. Auto-RESET is silent (no chat).
 
-| Command                  | Wirkung                                                              |
-| ------------------------ | -------------------------------------------------------------------- |
-| `/make-refill <minutes>` | Fokussierte Kiste registrieren; Inhalt = Template. Nur RESET.        |
-| `/refill-update`         | Aktuellen Inhalt als neues Template speichern (pending Timer bleibt) |
-| `/refill-now`            | Sofort RESET auf Template, pending clearen                           |
-| `/refill-remove`         | Aus DB entfernen, pending Timer killen                               |
-| `/refill-info`           | Intervall, pending ja/nein (+ Restzeit), Template-Kurzinfo           |
+| Command                  | Effect                                                         |
+| ------------------------ | -------------------------------------------------------------- |
+| `/make-refill <minutes>` | Register focused chest; contents = template. RESET only.       |
+| `/refill-update`         | Save current contents as new template (pending timer stays)    |
+| `/refill-now`            | Immediate RESET to template, clear pending                     |
+| `/refill-remove`         | Remove from DB, kill pending timer                             |
+| `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary |
 
-Fokus: `Player.getObjectElementInLineOfSight(5f, callback)`.
+Focus: `Player.getObjectElementInLineOfSight(5f, callback)`.
 
-Ablehnen:
+Reject:
 
-- leere Kiste bei `/make-refill` und `/refill-update`
-- bereits registrierte Kiste bei `/make-refill` (Hinweis auf `/refill-remove`)
-- transienter Storage / kein Storage
-- `/make-refill` ohne Minuten-Argument
+- empty chest on `/make-refill` and `/refill-update`
+- already registered chest on `/make-refill` (hint `/refill-remove`)
+- transient storage / no storage
+- `/make-refill` without a minutes argument
 
-Intervall in Minuten: `0` (und kleiner) -> effektive **5 Sekunden**. Sonst `minutes * 60`, Cap **86400** (ein Tag). Gespeichert wird `interval_seconds` (effektive Delay).
+Interval in minutes: `0` (or less) -> effective **5 seconds**. Else `minutes * 60`, cap **86400** (one day). Stored as `interval_seconds` (effective delay).
 
-**Nur RESET.** Kein REFILL-Modus. Fremde Items verschwinden beim Respawn mit `clear()`.
+**RESET only.** No REFILL mode. Foreign items disappear on respawn via `clear()`.
 
-**Nicht in v1:** Loot-Chancen, YAML-Tabellen, Admin-UI, periodischer Dauer-Respawn, Reinlegen als Trigger.
+**Not in v1:** loot chances, YAML tables, admin UI, periodic always-on respawn, putting items in as a trigger.
 
-## API-Pfad
+## API path
 
 ```text
 getObjectElementInLineOfSight()
   -> object.getGlobalID()
-  -> World.getStorage(globalID)   // bei Kisten: Storage-ID == Object-ID
+  -> World.getStorage(globalID)   // for chests: storage id == object id
   -> reject transient / null
   -> storage.getItems()
 ```
 
-- Item-Subtypen: `Item`, `Item.ObjectItem`, `Item.ConstructionItem`, `Item.ClothingItem` -- passende `Storage.add*ToSlot`.
-- `Item.BlueprintItem`: kein Add in der Storage-API -- Slot ueberspringen, Server-Log.
-- Nach `add*ToSlot`: `durability`, `status`, `value` auf dem zurueckgegebenen Item setzen.
-- RESET: `storage.clear()` + Template slotgenau.
-- `ObjectElement.setAttribute` nicht fuer Persistenz.
-- Commands: `PlayerCommandEvent`; bei Admin-Handling `setCancelled(true)`.
+- Item subtypes: `Item`, `Item.ObjectItem`, `Item.ConstructionItem`, `Item.ClothingItem` -- matching `Storage.add*ToSlot`.
+- `Item.BlueprintItem`: no add API on Storage -- skip slot, server log.
+- After `add*ToSlot`: set `durability`, `status`, `value` on the returned item.
+- RESET: `storage.clear()` + template slot-exact.
+- Do not use `ObjectElement.setAttribute` for persistence.
+- Commands: `PlayerCommandEvent`; on admin handling `setCancelled(true)`.
 
-Trigger: `PlayerStorageToInventoryEvent` (Kiste -> Inventar) und `PlayerDropItemFromStorageEvent` (Kiste -> Boden). Reinlegen startet keinen Timer.
+Triggers: `PlayerStorageToInventoryEvent` (chest -> inventory) and `PlayerDropItemFromStorageEvent` (chest -> ground). Putting items in does not start a timer.
 
 ```text
-Take-Event auf registrierte Storage
-  -> wenn next_refill == null: next_refill = now + interval, one-shot Timer
-  -> erneutes Looten: Timer nicht neu starten
-  -> Timer: Identity -> RESET -> next_refill = null
+Take event on registered storage
+  -> if next_refill == null: next_refill = now + interval, one-shot timer
+  -> further looting: do not restart timer
+  -> timer: identity -> RESET -> next_refill = null
 ```
 
-Pro Kiste hoechstens ein pending `net.risingworld.api.Timer` (`repetitions = 0`). `/refill-remove` und `onDisable` killen Timer.
+At most one pending `net.risingworld.api.Timer` per chest (`repetitions = 0`). `/refill-remove` and `onDisable` kill timers.
 
-Nach Start: **alle** DB-Eintraege Identity-checken und Leichen loeschen; pending `next_refill` danach schedulen bzw. sofort RESET wenn faellig.
+On startup: identity-check **all** DB rows and delete orphans; then schedule pending `next_refill` or RESET immediately if due.
 
-## Persistenz: SQLite
+## Persistence: SQLite
 
-`getSQLiteConnection(getPath() + "/refill.db")`. `PRAGMA foreign_keys = ON`.
+`getSQLiteConnection(getPath() + "/refill.db")`. `PRAGMA foreign_keys = ON`. Prefer `PRAGMA journal_mode=DELETE` so a copied `refill.db` alone is usable (WAL left data in `-wal`). Checkpoint on disable (`PRAGMA wal_checkpoint(TRUNCATE)`).
 
 ```text
 refill_chests:
   storage_id PK, object_id,
-  chunk_x/y/z,              -- fuer World.getObject
+  chunk_x/y/z,              -- for World.getObject
   world_x/y/z,
   object_type,              -- Objects.ObjectDefinition.name
   creation_date,            -- Storage.getCreationDate()
@@ -101,29 +101,29 @@ refill_items:
   FK storage_id ON DELETE CASCADE
 ```
 
-### Identity-Check
+### Identity check
 
-Beim Plugin-Start ueber **alle** DB-Eintraege, sowie vor RESET und vor Command-Zielen auf bereits registrierte Kisten:
+On plugin start over **all** DB rows, and before RESET / before command targets on already registered chests:
 
-1. `World.getStorage(storage_id)` fehlt oder transient -> Datensatz + Items loeschen, Timer killen.
-2. `storage.getCreationDate()` != gespeichert -> loeschen.
-3. `World.getObject(object_id, chunk_x, chunk_y, chunk_z)` wenn vorhanden: Typ muss passen, Distanz zu gespeicherter Position **<= 5** Bloecke; sonst loeschen.
-4. ObjectElement null (z.B. Chunk nicht geladen), aber Storage + creation_date ok: Storage gilt als identisch, Eintrag behalten / RESET erlaubt.
+1. `World.getStorage(storage_id)` missing or transient -> delete row + items, kill timer.
+2. `storage.getCreationDate()` != saved -> delete.
+3. `World.getObject(object_id, chunk_x, chunk_y, chunk_z)` when present: type must match, distance to saved position **<= 5** blocks; else delete.
+4. ObjectElement null (e.g. chunk unloaded) but storage + creation_date OK: treat as same chest, keep entry / allow RESET.
 
-Kein Blind-RESET auf eine andere Kiste. Idle-Leichen werden beim Start mit entfernt.
+No blind RESET onto a different chest. Idle orphans are removed on startup too.
 
 ## Scope
 
-v1: eine Plugin-Klasse (Commands + Loot-Events + Timer), Snapshot, SQLite (`RefillRepository`), Identity-Cleanup.
+v1: one plugin class (commands + loot events + timers), Snapshot, SQLite (`RefillRepository`), identity cleanup.
 
-Keine Framework-Schichten, keine Client-Mods.
+No framework layers, no client mods.
 
 ## Build / Setup
 
-- Java 21+ (`pom.xml`). JAR-Name `RespawnChest`. Deploy: `plugins/RespawnChest/RespawnChest.jar`.
-- `plugin.yml` muss in der JAR unter `resources/plugin.yml` liegen (`src/main/resources/resources/plugin.yml`), sonst laedt RW das Plugin nicht.
+- Java **20** (`pom.xml` source/target) -- RW Unity API runs on JDK 20. JAR name `RespawnChest`. Deploy: `plugins/RespawnChest/RespawnChest.jar`.
+- `plugin.yml` must live in the JAR as `resources/plugin.yml` (`src/main/resources/resources/plugin.yml`), or RW will not load the plugin.
 - Dependency: `net.rising-world:plugin-api:0.9.3` (`provided`).
-- Nach RW-Update PluginAPI neu einspielen und Version in `pom.xml` + `notes.txt` anpassen:
+- After an RW update, reinstall PluginAPI and bump version in `pom.xml` + `notes.txt`:
 
 ```powershell
 mvn install:install-file `
@@ -134,17 +134,17 @@ mvn install:install-file `
   "-Dpackaging=jar"
 ```
 
-PowerShell: `-D...`-Args **immer quoten**.
+PowerShell: always quote `-D...` args.
 
-## Code-Konventionen
+## Code conventions
 
 - Package: `de.mahagst.risingworld.respawnchest`.
-- Kleinster sinnvoller Change. LF-Zeilenenden.
-- `notes.txt` = Operator-Notiz fuer API-Updates; Spec = diese Datei.
+- Smallest sensible change. LF line endings.
+- `notes.txt` = operator notes for API updates; this file is the spec.
 
-## Agent-Hinweise
+## Agent notes
 
-- Vor API-Calls Javadoc 0.9.3 lesen.
-- Storage-ID == Object-ID bei Kisten trotzdem null- und Identity-checken.
-- Kein globaler Dauer-Poll. Kein REFILL. DB-Leichen aktiv loeschen.
-- Auto-RESET bleibt still. Commands nur fuer Server-Admins.
+- Read Javadoc 0.9.3 before API calls.
+- Storage id == object id for chests still requires null and identity checks.
+- No global continuous poll. No REFILL mode. Actively delete DB orphans.
+- Auto-RESET stays silent. Commands only for server admins.

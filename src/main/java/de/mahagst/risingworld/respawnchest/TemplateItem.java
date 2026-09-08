@@ -1,5 +1,9 @@
 package de.mahagst.risingworld.respawnchest;
 
+/**
+ * One template slot. itemKind selects which Storage.add*ToSlot path to use on restore.
+ * Blueprints are never stored (no add API).
+ */
 record TemplateItem(
 		int slot,
 		String itemKind,

@@ -6,6 +6,10 @@ import java.util.List;
 import net.risingworld.api.objects.Item;
 import net.risingworld.api.objects.Storage;
 
+/**
+ * Capture / restore chest contents slot-exact.
+ * RESET always clear()s first so foreign items disappear.
+ */
 final class Snapshot {
 	private Snapshot() {
 	}
@@ -35,6 +39,7 @@ final class Snapshot {
 			if (created == null) {
 				continue;
 			}
+			// add*ToSlot does not always carry these fields -- set after create.
 			created.setDurability(saved.durability());
 			created.setStatus(saved.status());
 			created.setValue(saved.value());
@@ -42,6 +47,7 @@ final class Snapshot {
 	}
 
 	private static TemplateItem captureItem(int slot, Item item) {
+		// Storage has no add API for blueprints -- skip rather than lose a whole restore.
 		if (item instanceof Item.BlueprintItem) {
 			System.out.println("[RespawnChest] Skipping blueprint item in slot " + slot
 					+ " (no Storage add API)");

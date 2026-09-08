@@ -1,5 +1,6 @@
 package de.mahagst.risingworld.respawnchest;
 
+/** One registered refill chest row. nextRefill null = idle (no pending timer). */
 record RefillChest(
 		long storageId,
 		long objectId,
