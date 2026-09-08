@@ -16,19 +16,6 @@ if ($Version -notmatch '^\d+\.\d+\.\d+([.-][A-Za-z0-9.-]+)?$') {
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-function Find-Gh {
-	$cmd = Get-Command gh -ErrorAction SilentlyContinue
-	if ($cmd) {
-		return $cmd.Source
-	}
-	$fallback = 'C:\Program Files\GitHub CLI\gh.exe'
-	if (Test-Path $fallback) {
-		return $fallback
-	}
-	Write-Error 'gh not found. Install GitHub CLI and run gh auth login.'
-}
-
-$Gh = Find-Gh
 $Tag = "v$Version"
 $PluginYml = Join-Path $Root 'src\main\resources\resources\plugin.yml'
 $Pom = Join-Path $Root 'pom.xml'
@@ -45,7 +32,7 @@ if ($existingTag) {
 	Write-Error "Tag $Tag already exists"
 }
 
-& $Gh auth status | Out-Null
+gh auth status | Out-Null
 
 Write-Host "Setting version $Version ..."
 $yml = [System.IO.File]::ReadAllText($PluginYml) -replace '(?m)^version:\s*.+$', "version: $Version"
@@ -94,7 +81,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Creating GitHub release $Tag ..."
-& $Gh release create $Tag $Zip --title "RespawnChest $Version" --generate-notes
+gh release create $Tag $Zip --title "RespawnChest $Version" --generate-notes
 if ($LASTEXITCODE -ne 0) {
 	Write-Error 'gh release create failed'
 }
