@@ -1,6 +1,7 @@
 package de.mahagst.risingworld.respawnchest;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +36,8 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 
 	private Database database;
 	private RefillRepository repository;
+	/** Membership mirror of refill_chests PKs; not chest state. */
+	private final Set<Long> registeredIds = new HashSet<>();
 	/** At most one pending RW timer per storage id. */
 	private final Map<Long, Timer> timers = new HashMap<>();
 
@@ -47,9 +50,9 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		}
 		repository = new RefillRepository(database);
 		repository.createSchema();
-		registerEventListener(this);
-		// Drop orphans and resume any pending next_refill from a previous run.
+		loadRegisteredIds();
 		sweepAndResume();
+		registerEventListener(this);
 		System.out.println("[RespawnChest] enabled");
 	}
 
@@ -171,7 +174,11 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				intervalSeconds,
 				null,
 				System.currentTimeMillis());
-		repository.insert(chest, items);
+		if (!repository.insert(chest, items)) {
+			player.sendTextMessage("Could not save refill chest.");
+			return;
+		}
+		registeredIds.add(chest.storageId());
 		player.sendTextMessage("Refill chest created. Interval: " + intervalSeconds + "s");
 	}
 
@@ -272,8 +279,13 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		if (storage == null) {
 			return;
 		}
-		Optional<RefillChest> chestOpt = repository.findChest(storage.getID());
+		long storageId = storage.getID();
+		if (!registeredIds.contains(storageId)) {
+			return;
+		}
+		Optional<RefillChest> chestOpt = repository.findChest(storageId);
 		if (chestOpt.isEmpty()) {
+			registeredIds.remove(storageId);
 			return;
 		}
 		RefillChest chest = chestOpt.get();
@@ -283,8 +295,8 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		if (!verifyOrDrop(chest)) {
 			return;
 		}
-		repository.setNextRefill(storage.getID(), System.currentTimeMillis() + chest.intervalSeconds() * 1000L);
-		schedule(storage.getID(), chest.intervalSeconds());
+		repository.setNextRefill(storageId, System.currentTimeMillis() + chest.intervalSeconds() * 1000L);
+		schedule(storageId, chest.intervalSeconds());
 	}
 
 	private void onRefillDue(long storageId) {
@@ -328,6 +340,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	private void drop(long storageId) {
 		cancelTimer(storageId);
 		repository.delete(storageId);
+		registeredIds.remove(storageId);
 	}
 
 	private static String objectType(ObjectElement object) {
@@ -393,6 +406,12 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			}
 		}
 		timers.clear();
+	}
+
+	private void loadRegisteredIds() {
+		for (RefillChest chest : repository.findAll()) {
+			registeredIds.add(chest.storageId());
+		}
 	}
 
 	/** Startup: verify every row, then fire overdue resets or schedule remaining delay. */

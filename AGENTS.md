@@ -69,7 +69,9 @@ getObjectElementInLineOfSight()
 Triggers: `PlayerStorageToInventoryEvent` (chest -> inventory) and `PlayerDropItemFromStorageEvent` (chest -> ground). Putting items in does not start a timer.
 
 ```text
-Take event on registered storage
+Take event on storage
+  -> RAM Set miss: return (no SQLite)
+  -> findChest; ghost ID: remove from Set
   -> if next_refill == null: next_refill = now + interval, one-shot timer
   -> further looting: do not restart timer
   -> timer: identity -> RESET -> next_refill = null
@@ -77,11 +79,13 @@ Take event on registered storage
 
 At most one pending `net.risingworld.api.Timer` per chest (`repetitions = 0`). `/refill-remove` and `onDisable` kill timers.
 
-On startup: identity-check **all** DB rows and delete orphans; then schedule pending `next_refill` or RESET immediately if due.
+On startup: load registered `storage_id`s into a RAM `Set`, identity-check **all** DB rows and delete orphans (`drop` also removes the id from the Set); then schedule pending `next_refill` or RESET immediately if due. Register the event listener last.
 
 ## Persistence: SQLite
 
 `getSQLiteConnection(getPath() + "/refill.db")`. `PRAGMA foreign_keys = ON`. Prefer `PRAGMA journal_mode=DELETE` so a copied `refill.db` alone is usable (WAL left data in `-wal`). Checkpoint on disable (`PRAGMA wal_checkpoint(TRUNCATE)`).
+
+A RAM `Set` of `storage_id`s filters loot events (`registeredIds.contains` <=> row in `refill_chests`). SQLite remains source of truth. Sync: add after successful insert, remove in `drop` only.
 
 ```text
 refill_chests:
@@ -148,3 +152,4 @@ PowerShell: always quote `-D...` args.
 - Storage id == object id for chests still requires null and identity checks.
 - No global continuous poll. No REFILL mode. Actively delete DB orphans.
 - Auto-RESET stays silent. Commands only for server admins.
+- Loot hot path: RAM `registeredIds` first; SQLite only on hit. Keep Set in sync via insert + `drop` only.

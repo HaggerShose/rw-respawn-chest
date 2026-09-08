@@ -17,7 +17,6 @@ final class RefillRepository {
 
 	void createSchema() {
 		database.execute("PRAGMA foreign_keys = ON");
-		// Prefer a single-file DB so refill.db alone is inspectable/backupable.
 		// DELETE so a copied refill.db alone is complete; write load is tiny.
 		database.execute("PRAGMA journal_mode=DELETE");
 		database.execute("""
@@ -111,7 +110,7 @@ final class RefillRepository {
 		return items;
 	}
 
-	void insert(RefillChest chest, List<TemplateItem> items) {
+	boolean insert(RefillChest chest, List<TemplateItem> items) {
 		var sql = """
 				INSERT INTO refill_chests (
 				  storage_id, object_id, chunk_x, chunk_y, chunk_z,
@@ -124,9 +123,10 @@ final class RefillRepository {
 			prep.executeUpdate();
 		} catch (SQLException e) {
 			e.printStackTrace();
-			return;
+			return false;
 		}
 		replaceItems(chest.storageId(), items);
+		return true;
 	}
 
 	/** Replace the whole template; used by /make-refill insert path and /refill-update. */
