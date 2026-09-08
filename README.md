@@ -25,13 +25,13 @@ Admin only (`Server_Admins` in `server.properties`).
 
 Look at the chest first, then use chat or the `^` console **with** a leading `/`.
 
-| Command                  | Effect                                                               |
-| ------------------------ | -------------------------------------------------------------------- |
-| `/make-refill <minutes>` | Register the focused chest. Current contents become the template.    |
-| `/refill-update`         | Save the current contents as the new template (pending timer stays). |
-| `/refill-now`            | Reset immediately and clear any pending timer.                       |
-| `/refill-remove`         | Unregister the chest.                                                |
-| `/refill-info`           | Show interval, pending state, remaining time, and template size.     |
+| Command                  | Effect                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `/make-refill <minutes>` | Register the focused chest. Current contents become the template. Already registered: update interval only. |
+| `/refill-update`         | Save the current contents as the new template (pending timer stays).                                        |
+| `/refill-now`            | Reset immediately and clear any pending timer.                                                              |
+| `/refill-remove`         | Unregister the chest.                                                                                       |
+| `/refill-info`           | Show interval, pending state, remaining time, and template size.                                            |
 
 ### Interval
 
@@ -41,8 +41,8 @@ Look at the chest first, then use chat or the `^` console **with** a leading `/`
 
 ### Rules
 
-- Empty chests cannot be registered or updated.
-- An already registered chest must be removed with `/refill-remove` before `/make-refill` again.
+- Empty chests cannot be registered or have their template updated.
+- `/make-refill` on an already registered chest only changes the interval (same interval = no-op). A pending timer is not restarted.
 - On respawn the chest is emptied completely, then the saved template is put back exactly (same slots and stacks). Anything players added that was not in the template is gone.
 
 ## Install

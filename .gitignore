@@ -13,3 +13,4 @@ bin/deploy.ps1
 .cursor
 notes.txt
 *.code-workspace
+notes.md

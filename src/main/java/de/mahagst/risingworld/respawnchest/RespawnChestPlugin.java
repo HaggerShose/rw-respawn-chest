@@ -151,7 +151,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 
 	private void register(Player player, ObjectElement object, Storage storage, int intervalSeconds) {
 		if (repository.findChest(storage.getID()).isPresent()) {
-			player.sendTextMessage("Chest is already registered. Use /refill-remove first.");
+			updateInterval(player, object, storage, intervalSeconds);
 			return;
 		}
 		List<TemplateItem> items = Snapshot.capture(storage.getItems());
@@ -180,6 +180,20 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		}
 		registeredIds.add(chest.storageId());
 		player.sendTextMessage("Refill chest created. Interval: " + intervalSeconds + "s");
+	}
+
+	/** Pending timer and next_refill stay as they are; new interval applies on the next loot. */
+	private void updateInterval(Player player, ObjectElement object, Storage storage, int intervalSeconds) {
+		RefillChest chest = requireValid(player, object, storage);
+		if (chest == null) {
+			return;
+		}
+		if (chest.intervalSeconds() == intervalSeconds) {
+			player.sendTextMessage("Interval not changed (already " + intervalSeconds + "s).");
+			return;
+		}
+		repository.setIntervalSeconds(chest.storageId(), intervalSeconds);
+		player.sendTextMessage("Interval updated to " + intervalSeconds + "s.");
 	}
 
 	private void update(Player player, ObjectElement object, Storage storage) {

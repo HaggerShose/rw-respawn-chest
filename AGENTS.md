@@ -26,20 +26,19 @@ Admins only: `player.isAdmin()` (`Server_Admins` in `server.properties`). Otherw
 
 Admin commands reply only to the executing admin. Auto-RESET is silent (no chat).
 
-| Command                  | Effect                                                         |
-| ------------------------ | -------------------------------------------------------------- |
-| `/make-refill <minutes>` | Register focused chest; contents = template. RESET only.       |
-| `/refill-update`         | Save current contents as new template (pending timer stays)    |
-| `/refill-now`            | Immediate RESET to template, clear pending                     |
-| `/refill-remove`         | Remove from DB, kill pending timer                             |
-| `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary |
+| Command                  | Effect                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `/make-refill <minutes>` | Register focused chest; contents = template. If already registered: update interval only (pending timer stays). |
+| `/refill-update`         | Save current contents as new template (pending timer stays)                                                     |
+| `/refill-now`            | Immediate RESET to template, clear pending                                                                      |
+| `/refill-remove`         | Remove from DB, kill pending timer                                                                              |
+| `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary                                                  |
 
 Focus: `Player.getObjectElementInLineOfSight(5f, callback)`.
 
 Reject:
 
-- empty chest on `/make-refill` and `/refill-update`
-- already registered chest on `/make-refill` (hint `/refill-remove`)
+- empty chest on `/make-refill` (new register) and `/refill-update`
 - transient storage / no storage
 - `/make-refill` without a minutes argument
 

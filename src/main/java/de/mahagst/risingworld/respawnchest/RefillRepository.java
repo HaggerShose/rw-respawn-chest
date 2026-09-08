@@ -182,6 +182,17 @@ final class RefillRepository {
 		}
 	}
 
+	void setIntervalSeconds(long storageId, int intervalSeconds) {
+		var sql = "UPDATE refill_chests SET interval_seconds = ? WHERE storage_id = ?";
+		try (var prep = database.getConnection().prepareStatement(sql)) {
+			prep.setInt(1, intervalSeconds);
+			prep.setLong(2, storageId);
+			prep.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
 	/** CASCADE deletes refill_items via FK. */
 	void delete(long storageId) {
 		var sql = "DELETE FROM refill_chests WHERE storage_id = ?";
