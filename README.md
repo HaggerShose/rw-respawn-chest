@@ -60,3 +60,7 @@ Plugins/RespawnChest/refill.db
 ```
 
 On startup, missing or replaced chests are cleaned out of the database so dead entries do not stick around.
+
+## License
+
+MIT -- see [LICENSE](LICENSE).
