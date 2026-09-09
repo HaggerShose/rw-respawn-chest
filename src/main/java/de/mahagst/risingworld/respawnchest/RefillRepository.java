@@ -1,5 +1,6 @@
 package de.mahagst.risingworld.respawnchest;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,26 +119,25 @@ final class RefillRepository {
 				  interval_seconds, next_refill, created_at
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""";
-		try (var prep = database.getConnection().prepareStatement(sql)) {
-			bindChest(prep, chest);
-			prep.executeUpdate();
-		} catch (SQLException e) {
-			e.printStackTrace();
-			return false;
-		}
-		replaceItems(chest.storageId(), items);
-		return true;
+		return inTransaction(conn -> {
+			try (var prep = conn.prepareStatement(sql)) {
+				bindChest(prep, chest);
+				prep.executeUpdate();
+			}
+			replaceItemsOn(conn, chest.storageId(), items);
+		});
 	}
 
 	/** Replace the whole template; used by /make-refill insert path and /refill-update. */
-	void replaceItems(long storageId, List<TemplateItem> items) {
+	boolean replaceItems(long storageId, List<TemplateItem> items) {
+		return inTransaction(conn -> replaceItemsOn(conn, storageId, items));
+	}
+
+	private void replaceItemsOn(Connection conn, long storageId, List<TemplateItem> items) throws SQLException {
 		var deleteSql = "DELETE FROM refill_items WHERE storage_id = ?";
-		try (var prep = database.getConnection().prepareStatement(deleteSql)) {
+		try (var prep = conn.prepareStatement(deleteSql)) {
 			prep.setLong(1, storageId);
 			prep.executeUpdate();
-		} catch (SQLException e) {
-			e.printStackTrace();
-			return;
 		}
 		var insertSql = """
 				INSERT INTO refill_items (
@@ -145,7 +145,7 @@ final class RefillRepository {
 				  durability, status, value, color, info_id
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""";
-		try (var prep = database.getConnection().prepareStatement(insertSql)) {
+		try (var prep = conn.prepareStatement(insertSql)) {
 			for (TemplateItem item : items) {
 				prep.setLong(1, storageId);
 				prep.setInt(2, item.slot());
@@ -161,9 +161,40 @@ final class RefillRepository {
 				prep.addBatch();
 			}
 			prep.executeBatch();
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
+	}
+
+	private boolean inTransaction(SqlWork work) {
+		Connection conn = database.getConnection();
+		Boolean previous = null;
+		try {
+			previous = conn.getAutoCommit();
+			conn.setAutoCommit(false);
+			work.run(conn);
+			conn.commit();
+			return true;
+		} catch (SQLException e) {
+			try {
+				conn.rollback();
+			} catch (SQLException rollbackEx) {
+				rollbackEx.printStackTrace();
+			}
+			e.printStackTrace();
+			return false;
+		} finally {
+			if (previous != null) {
+				try {
+					conn.setAutoCommit(previous);
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	@FunctionalInterface
+	private interface SqlWork {
+		void run(Connection conn) throws SQLException;
 	}
 
 	/** null next_refill means idle (no timer pending). */

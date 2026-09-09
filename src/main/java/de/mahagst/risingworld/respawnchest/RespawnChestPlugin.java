@@ -207,7 +207,10 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			return;
 		}
 		// Pending timer is intentionally left alone.
-		repository.replaceItems(storage.getID(), items);
+		if (!repository.replaceItems(storage.getID(), items)) {
+			player.sendTextMessage("Could not save template.");
+			return;
+		}
 		player.sendTextMessage("Template updated.");
 	}
 
