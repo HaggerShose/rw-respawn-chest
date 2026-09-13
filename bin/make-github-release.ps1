@@ -37,7 +37,7 @@ gh auth status | Out-Null
 Write-Host "Setting version $Version ..."
 $yml = [System.IO.File]::ReadAllText($PluginYml) -replace '(?m)^version:\s*.+$', "version: $Version"
 if ($yml -notmatch "(?m)^version:\s*$([regex]::Escape($Version))\s*$") {
-	Write-Error "Failed to update version in plugin.yml"
+	Write-Error 'Failed to update version in plugin.yml'
 }
 [System.IO.File]::WriteAllText($PluginYml, ($yml -replace "`r`n", "`n").TrimEnd() + "`n")
 
@@ -60,6 +60,9 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host 'Building release zip ...'
 & $MakeRelease
+if ($LASTEXITCODE -ne 0) {
+	Write-Error "make-release.ps1 failed (exit $LASTEXITCODE)"
+}
 if (-not (Test-Path $Zip)) {
 	Write-Error "Zip missing: $Zip"
 }

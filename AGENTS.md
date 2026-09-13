@@ -125,16 +125,12 @@ No framework layers, no client mods.
 
 - Java **20** (`pom.xml` source/target) -- RW Unity API runs on JDK 20. JAR name `RespawnChest`. Deploy: `plugins/RespawnChest/RespawnChest.jar`.
 - `plugin.yml` must live in the JAR as `resources/plugin.yml` (`src/main/resources/resources/plugin.yml`), or RW will not load the plugin.
-- Dependency: `net.rising-world:plugin-api:0.9.3` (`provided`).
-- After an RW update, reinstall PluginAPI and bump version in `pom.xml` + `notes.txt`:
+- Dependency: `net.rising-world:plugin-api:0.9.3` (`provided`), installed from `lib/PluginAPI.jar` on Maven `validate`.
+- After an RW update, refresh the lib JAR and bump version in `pom.xml` + `notes.txt`:
 
 ```powershell
-mvn install:install-file `
-  "-Dfile=C:\Program Files (x86)\Steam\steamapps\common\RisingWorld\Data\SDK\PluginAPI.jar" `
-  "-DgroupId=net.rising-world" `
-  "-DartifactId=plugin-api" `
-  "-Dversion=0.9.3" `
-  "-Dpackaging=jar"
+.\scripts\bootstrap-libs.ps1
+mvn -B package
 ```
 
 PowerShell: always quote `-D...` args.
