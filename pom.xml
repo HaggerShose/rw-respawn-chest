@@ -16,6 +16,7 @@
   </properties>
 
   <dependencies>
+    <!-- provided: install once via .\_tools\bootstrap-libs.ps1 -->
     <dependency>
       <groupId>net.rising-world</groupId>
       <artifactId>plugin-api</artifactId>
@@ -26,30 +27,6 @@
 
   <build>
     <finalName>RespawnChest</finalName>
-    <plugins>
-      <!-- Install bundled PluginAPI into the local .m2 repo before compile. -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-install-plugin</artifactId>
-        <version>3.1.1</version>
-        <executions>
-          <execution>
-            <id>install-plugin-api-lib</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>install-file</goal>
-            </goals>
-            <configuration>
-              <file>${project.basedir}/lib/PluginAPI.jar</file>
-              <groupId>net.rising-world</groupId>
-              <artifactId>plugin-api</artifactId>
-              <version>${rw.plugin.api.version}</version>
-              <packaging>jar</packaging>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
   </build>
 
 </project>

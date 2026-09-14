@@ -125,12 +125,12 @@ No framework layers, no client mods.
 
 - Java **20** (`pom.xml` source/target) -- RW Unity API runs on JDK 20. JAR name `RespawnChest`. Deploy: `plugins/RespawnChest/RespawnChest.jar`.
 - `plugin.yml` must live in the JAR as `resources/plugin.yml` (`src/main/resources/resources/plugin.yml`), or RW will not load the plugin.
-- Dependency: `net.rising-world:plugin-api:0.9.3` (`provided`), installed from `lib/PluginAPI.jar` on Maven `validate`.
-- After an RW update, refresh the lib JAR and bump version in `pom.xml` + `notes.txt`:
+- Dependency: `net.rising-world:plugin-api:0.9.3` (`provided`). Install once into local `.m2` via workspace bootstrap (not on every Maven run).
+- After an RW update, bump `<rw.plugin.api.version>` / `api:` and refresh `.m2` from the workspace root:
 
 ```powershell
-.\scripts\bootstrap-libs.ps1
-mvn -B package
+.\_tools\bootstrap-libs.ps1 -P rw-respawn-chest
+cd rw-respawn-chest; mvn -B package
 ```
 
 PowerShell: always quote `-D...` args.
@@ -139,7 +139,7 @@ PowerShell: always quote `-D...` args.
 
 - Package: `de.mahagst.risingworld.respawnchest`.
 - Smallest sensible change. LF line endings.
-- `notes.txt` = operator notes for API updates; this file is the spec.
+- `notes.txt` = operator notes for API/bootstrap updates (paths assume workspace root); this file is the spec.
 
 ## Agent notes
 

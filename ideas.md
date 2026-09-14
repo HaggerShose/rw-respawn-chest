@@ -10,8 +10,3 @@
 - Periodischer Dauer-Respawn ohne Loot-Trigger  
 - Admin-UI statt Chat  
 - Volle `Map<RefillChest>` statt nur ID-Set (hast du bewusst schlank gelassen)
-
-## Was ich **nicht** anfassen würde
-- Mehr Framework-Schichten  
-- Client-Mod  
-- Globaler Poll  
