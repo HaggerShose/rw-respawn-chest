@@ -60,7 +60,7 @@ getObjectElementInLineOfSight()
 
 - Item subtypes: `Item`, `Item.ObjectItem`, `Item.ConstructionItem`, `Item.ClothingItem` -- matching `Storage.add*ToSlot`.
 - `Item.BlueprintItem`: no add API on Storage -- skip slot, server log.
-- After `add*ToSlot`: set `durability`, `status`, `value` on the returned item.
+- After `add*ToSlot`: set `durability`, `status`, `value`, `modifier` on the returned item.
 - RESET: `storage.clear()` + template slot-exact.
 - Do not use `ObjectElement.setAttribute` for persistence.
 - Commands: `PlayerCommandEvent`; on admin handling `setCancelled(true)`.
@@ -100,9 +100,18 @@ refill_chests:
 refill_items:
   storage_id + slot PK,
   item_kind, type_id, variant, stack,
-  durability, status, value, color, info_id
+  durability, status, value, color, info_id,
+  modifier                 -- Items.Modifier name; NULL/blank reads as Normal
   FK storage_id ON DELETE CASCADE
 ```
+
+Existing templates without `modifier` stay valid (`Normal`). Legendary (and other) items need `/refill-update` once after this change so the real modifier is stored.
+
+### Schema evolution
+
+No migration runner. `CREATE TABLE IF NOT EXISTS` is the target schema. After CREATE, call `SqliteSchema.ensureColumn` for each column added later so old `refill.db` files pick it up.
+
+Copy [`_tools/templates/SqliteSchema.java`](../_tools/templates/SqliteSchema.java) into the plugin package and change the package line. `ensureColumn` is idempotent (`PRAGMA table_info`, then `ALTER TABLE ... ADD COLUMN` only if missing). Keep the call permanently -- it also covers an old db copied onto a new server.
 
 ### Identity check
 

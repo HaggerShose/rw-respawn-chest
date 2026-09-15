@@ -50,10 +50,12 @@ final class RefillRepository {
 				  value REAL NOT NULL,
 				  color INTEGER NOT NULL,
 				  info_id INTEGER NOT NULL,
+				  modifier TEXT,
 				  PRIMARY KEY(storage_id, slot),
 				  FOREIGN KEY(storage_id) REFERENCES refill_chests(storage_id) ON DELETE CASCADE
 				)
 				""");
+		SqliteSchema.ensureColumn(database, "refill_items", "modifier", "TEXT");
 	}
 
 	Optional<RefillChest> findChest(long storageId) {
@@ -102,7 +104,8 @@ final class RefillRepository {
 							(short) result.getInt("status"),
 							result.getFloat("value"),
 							result.getInt("color"),
-							result.getLong("info_id")));
+							result.getLong("info_id"),
+							readModifier(result)));
 				}
 			}
 		} catch (SQLException e) {
@@ -142,8 +145,8 @@ final class RefillRepository {
 		var insertSql = """
 				INSERT INTO refill_items (
 				  storage_id, slot, item_kind, type_id, variant, stack,
-				  durability, status, value, color, info_id
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				  durability, status, value, color, info_id, modifier
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""";
 		try (var prep = conn.prepareStatement(insertSql)) {
 			for (TemplateItem item : items) {
@@ -158,6 +161,7 @@ final class RefillRepository {
 				prep.setFloat(9, item.value());
 				prep.setInt(10, item.color());
 				prep.setLong(11, item.infoId());
+				prep.setString(12, item.modifier());
 				prep.addBatch();
 			}
 			prep.executeBatch();
@@ -253,6 +257,14 @@ final class RefillRepository {
 			prep.setLong(12, chest.nextRefill());
 		}
 		prep.setLong(13, chest.createdAt());
+	}
+
+	private static String readModifier(java.sql.ResultSet result) throws SQLException {
+		String modifier = result.getString("modifier");
+		if (modifier == null || modifier.isBlank()) {
+			return "Normal";
+		}
+		return modifier;
 	}
 
 	private static RefillChest readChest(java.sql.ResultSet result) throws SQLException {

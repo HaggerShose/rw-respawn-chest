@@ -14,7 +14,8 @@ record TemplateItem(
 		short status,
 		float value,
 		int color,
-		long infoId) {
+		long infoId,
+		String modifier) {
 	static final String KIND_ITEM = "item";
 	static final String KIND_OBJECT = "object";
 	static final String KIND_CONSTRUCTION = "construction";

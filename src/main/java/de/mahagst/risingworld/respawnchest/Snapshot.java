@@ -3,6 +3,7 @@ package de.mahagst.risingworld.respawnchest;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.risingworld.api.definitions.Items;
 import net.risingworld.api.objects.Item;
 import net.risingworld.api.objects.Storage;
 
@@ -43,6 +44,7 @@ final class Snapshot {
 			created.setDurability(saved.durability());
 			created.setStatus(saved.status());
 			created.setValue(saved.value());
+			created.setModifier(parseModifier(saved.modifier()));
 		}
 	}
 
@@ -53,6 +55,7 @@ final class Snapshot {
 					+ " (no Storage add API)");
 			return null;
 		}
+		String modifier = itemModifier(item);
 		if (item instanceof Item.ObjectItem objectItem) {
 			return new TemplateItem(
 					slot,
@@ -64,7 +67,8 @@ final class Snapshot {
 					objectItem.getStatus(),
 					objectItem.getValue(),
 					0,
-					0);
+					0,
+					modifier);
 		}
 		if (item instanceof Item.ConstructionItem constructionItem) {
 			return new TemplateItem(
@@ -77,7 +81,8 @@ final class Snapshot {
 					constructionItem.getStatus(),
 					constructionItem.getValue(),
 					constructionItem.getColor(),
-					constructionItem.getInfoID());
+					constructionItem.getInfoID(),
+					modifier);
 		}
 		if (item instanceof Item.ClothingItem clothingItem) {
 			return new TemplateItem(
@@ -90,7 +95,8 @@ final class Snapshot {
 					clothingItem.getStatus(),
 					clothingItem.getValue(),
 					0,
-					clothingItem.getInfoID());
+					clothingItem.getInfoID(),
+					modifier);
 		}
 		return new TemplateItem(
 				slot,
@@ -102,7 +108,24 @@ final class Snapshot {
 				item.getStatus(),
 				item.getValue(),
 				0,
-				0);
+				0,
+				modifier);
+	}
+
+	private static String itemModifier(Item item) {
+		Items.Modifier modifier = item.getModifier();
+		return modifier == null ? "Normal" : modifier.name();
+	}
+
+	private static Items.Modifier parseModifier(String name) {
+		if (name == null || name.isBlank()) {
+			return Items.Modifier.Normal;
+		}
+		try {
+			return Items.Modifier.valueOf(name);
+		} catch (IllegalArgumentException e) {
+			return Items.Modifier.Normal;
+		}
 	}
 
 	private static Item addToSlot(Storage storage, TemplateItem saved) {
