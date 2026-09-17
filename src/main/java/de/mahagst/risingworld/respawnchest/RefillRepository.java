@@ -18,7 +18,7 @@ final class RefillRepository {
 
 	void createSchema() {
 		database.execute("PRAGMA foreign_keys = ON");
-		// DELETE so a copied refill.db alone is complete; write load is tiny.
+		// DELETE so a copied world db alone is complete; write load is tiny.
 		database.execute("PRAGMA journal_mode=DELETE");
 		database.execute("""
 				CREATE TABLE IF NOT EXISTS refill_chests (

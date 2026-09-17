@@ -56,8 +56,10 @@ Plugins/RespawnChest/RespawnChest.jar
 State is stored automatically in:
 
 ```text
-Plugins/RespawnChest/refill.db
+Plugins/RespawnChest/<WorldName>.db
 ```
+
+Older installs used `refill.db`. On first start the plugin moves that file to the world db if the world file does not exist yet.
 
 On startup, only clearly replaced or invalid chests are removed from the database. A missing storage lookup alone does not delete a registration.
 

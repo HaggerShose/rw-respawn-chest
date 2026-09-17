@@ -82,7 +82,9 @@ On startup: load registered `storage_id`s into a RAM `Set`, identity-check **all
 
 ## Persistence: SQLite
 
-`getSQLiteConnection(getPath() + "/refill.db")`. `PRAGMA foreign_keys = ON`. Prefer `PRAGMA journal_mode=DELETE` so a copied `refill.db` alone is usable (WAL left data in `-wal`). Checkpoint on disable (`PRAGMA wal_checkpoint(TRUNCATE)`).
+One file per world: `getPath() + "/" + World.getName() + ".db"` (path-unsafe chars in the name become `_`). `PRAGMA foreign_keys = ON`. Prefer `PRAGMA journal_mode=DELETE` so a copied world db alone is usable (WAL left data in `-wal`). Checkpoint on disable (`PRAGMA wal_checkpoint(TRUNCATE)`).
+
+One-shot file migrate on enable: if `refill.db` exists and the world db does not, `LegacyRespawnDbMigration` moves it (plus `-wal`/`-shm`). Delete that class once old installs are gone.
 
 A RAM `Set` of `storage_id`s filters loot events (`registeredIds.contains` <=> row in `refill_chests`). SQLite remains source of truth. Sync: add after successful insert, remove in `drop` only.
 
@@ -109,7 +111,7 @@ Existing templates without `modifier` stay valid (`Normal`). Legendary (and othe
 
 ### Schema evolution
 
-No migration runner. `CREATE TABLE IF NOT EXISTS` is the target schema. After CREATE, call `SqliteSchema.ensureColumn` for each column added later so old `refill.db` files pick it up.
+No schema migration runner. `CREATE TABLE IF NOT EXISTS` is the target schema. After CREATE, call `SqliteSchema.ensureColumn` for each column added later so old world db files pick it up.
 
 Copy [`_tools/templates/SqliteSchema.java`](../_tools/templates/SqliteSchema.java) into the plugin package and change the package line. `ensureColumn` is idempotent (`PRAGMA table_info`, then `ALTER TABLE ... ADD COLUMN` only if missing). Keep the call permanently -- it also covers an old db copied onto a new server.
 

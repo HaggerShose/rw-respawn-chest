@@ -45,9 +45,11 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 
 	@Override
 	public void onEnable() {
-		database = getSQLiteConnection(getPath() + "/refill.db");
+		String dbFile = worldDbFileName();
+		LegacyRespawnDbMigration.run(getPath(), dbFile);
+		database = getSQLiteConnection(getPath() + "/" + dbFile);
 		if (database == null) {
-			System.out.println("[RespawnChest] Failed to open SQLite database");
+			System.out.println("[RespawnChest] Failed to open SQLite database: " + dbFile);
 			return;
 		}
 		repository = new RefillRepository(database);
@@ -62,7 +64,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	public void onDisable() {
 		cancelAllTimers();
 		if (database != null) {
-			// Flush WAL into the main file so a copied refill.db alone is complete.
+			// Flush WAL into the main file so a copied world db alone is complete.
 			database.execute("PRAGMA wal_checkpoint(TRUNCATE)");
 			database.close();
 		}
@@ -469,6 +471,22 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				schedule(chest.storageId(), (next - now) / 1000f);
 			}
 		}
+	}
+
+	/**
+	 * One SQLite file per world: {@code <World.getName()>.db}.
+	 * Path-unsafe characters become {@code _}.
+	 */
+	private static String worldDbFileName() {
+		String name = World.getName();
+		if (name == null || name.isBlank()) {
+			return "world.db";
+		}
+		String safe = name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+		if (safe.isBlank()) {
+			return "world.db";
+		}
+		return safe + ".db";
 	}
 
 	/**
