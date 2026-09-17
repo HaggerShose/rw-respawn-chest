@@ -117,12 +117,12 @@ Copy [`_tools/templates/SqliteSchema.java`](../_tools/templates/SqliteSchema.jav
 
 On plugin start over **all** DB rows, and before RESET / before command targets on already registered chests:
 
-1. `World.getStorage(storage_id)` missing or transient -> delete row + items, kill timer.
-2. `storage.getCreationDate()` != saved -> delete.
-3. `World.getObject(object_id, chunk_x, chunk_y, chunk_z)` when present: type must match, distance to saved position **<= 5** blocks; else delete.
+1. `World.getStorage(storage_id)` missing -> **keep** the row (UNCERTAIN). Never treat null as proof the chest is gone. Pending refill: silent retry every 30s.
+2. Storage transient, or `storage.getCreationDate()` != saved -> delete.
+3. `World.getObject(object_id, chunk_x, chunk_y, chunk_z)` when present: type must match, distance to saved position **<= 5** blocks; else delete. Position null while object loaded -> keep (UNCERTAIN), retry if pending.
 4. ObjectElement null (e.g. chunk unloaded) but storage + creation_date OK: treat as same chest, keep entry / allow RESET.
 
-No blind RESET onto a different chest. Idle orphans are removed on startup too.
+No blind RESET onto a different chest. Truly deleted chests may leave idle DB orphans; that is preferred over false deletes.
 
 ## Scope
 
@@ -154,6 +154,6 @@ PowerShell: always quote `-D...` args.
 
 - Read Javadoc 0.9.3 before API calls.
 - Storage id == object id for chests still requires null and identity checks.
-- No global continuous poll. No REFILL mode. Actively delete DB orphans.
+- No global continuous poll. No REFILL mode. Drop only on clear identity mismatch (not on null storage).
 - Auto-RESET stays silent. Commands only for server admins.
 - Loot hot path: RAM `registeredIds` first; SQLite only on hit. Keep Set in sync via insert + `drop` only.

@@ -28,6 +28,8 @@ import net.risingworld.api.utils.Vector3f;
 public class RespawnChestPlugin extends Plugin implements Listener {
 	static final float LOS_DISTANCE = 5f;
 	static final float MAX_IDENTITY_DISTANCE = 5f;
+	/** Retry when storage is temporarily unavailable; never delete on null alone. */
+	static final float STORAGE_RETRY_SECONDS = 30f;
 	static final int MAX_INTERVAL_SECONDS = 24 * 60 * 60;
 	/** Effective delay when /make-refill gets 0 or negative minutes (quick test). */
 	static final int MIN_TEST_SECONDS = 5;
@@ -260,11 +262,17 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			return null;
 		}
 		RefillChest chest = chestOpt.get();
-		if (!verifyOrDrop(chest, storage, object)) {
+		Identity id = identity(chest, storage, object);
+		if (id == Identity.MATCH) {
+			return chest;
+		}
+		if (id == Identity.MISMATCH) {
+			drop(chest.storageId());
 			player.sendTextMessage("Chest is no longer valid, entry removed.");
 			return null;
 		}
-		return chest;
+		player.sendTextMessage("Chest is not available right now.");
+		return null;
 	}
 
 	/** Resolve LoS object -> non-transient Storage, then run the command handler. */
@@ -309,7 +317,12 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		if (chest.nextRefill() != null) {
 			return;
 		}
-		if (!verifyOrDrop(chest)) {
+		Identity id = identity(chest, storage, findObject(chest));
+		if (id == Identity.MISMATCH) {
+			drop(storageId);
+			return;
+		}
+		if (id != Identity.MATCH) {
 			return;
 		}
 		repository.setNextRefill(storageId, System.currentTimeMillis() + chest.intervalSeconds() * 1000L);
@@ -323,7 +336,14 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			return;
 		}
 		RefillChest chest = chestOpt.get();
-		if (!verifyOrDrop(chest)) {
+		Identity id = identity(chest, World.getStorage(storageId), findObject(chest));
+		if (id == Identity.MISMATCH) {
+			drop(storageId);
+			return;
+		}
+		if (id == Identity.UNCERTAIN) {
+			// Keep DB row; storage may not be ready yet (startup / unload race).
+			schedule(storageId, STORAGE_RETRY_SECONDS);
 			return;
 		}
 		restoreQuietly(chest);
@@ -332,26 +352,18 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	/** Silent RESET: clear storage, write template slots, clear pending. No chat. */
 	private void restoreQuietly(RefillChest chest) {
 		Storage storage = World.getStorage(chest.storageId());
-		if (storage == null) {
+		Identity id = identity(chest, storage, findObject(chest));
+		if (id == Identity.MISMATCH) {
 			drop(chest.storageId());
+			return;
+		}
+		if (id != Identity.MATCH) {
+			schedule(chest.storageId(), STORAGE_RETRY_SECONDS);
 			return;
 		}
 		Snapshot.restore(storage, repository.findItems(chest.storageId()));
 		repository.setNextRefill(chest.storageId(), null);
 		cancelTimer(chest.storageId());
-	}
-
-	private boolean verifyOrDrop(RefillChest chest) {
-		return verifyOrDrop(chest, World.getStorage(chest.storageId()), findObject(chest));
-	}
-
-	/** Identity fail => delete DB row and timer so we never RESET a different chest. */
-	private boolean verifyOrDrop(RefillChest chest, Storage storage, ObjectElement object) {
-		if (matches(chest, storage, object)) {
-			return true;
-		}
-		drop(chest.storageId());
-		return false;
 	}
 
 	private void drop(long storageId) {
@@ -373,31 +385,34 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	}
 
 	/**
-	 * Same physical chest: storage exists, creation_date matches, and if the object
-	 * is loaded: type + position within MAX_IDENTITY_DISTANCE. Null object (unloaded
-	 * chunk) with matching storage is still accepted.
+	 * MATCH: same chest, safe to RESET / command.
+	 * UNCERTAIN: storage missing -- keep DB row (never treat null as proof of deletion).
+	 * MISMATCH: positive proof the chest was replaced or is invalid -- drop.
 	 */
-	private static boolean matches(RefillChest saved, Storage storage, ObjectElement object) {
-		if (storage == null || storage.isTransient()) {
-			return false;
+	private static Identity identity(RefillChest saved, Storage storage, ObjectElement object) {
+		if (storage == null) {
+			return Identity.UNCERTAIN;
+		}
+		if (storage.isTransient()) {
+			return Identity.MISMATCH;
 		}
 		if (storage.getCreationDate() != saved.creationDate()) {
-			return false;
+			return Identity.MISMATCH;
 		}
 		if (object != null) {
 			if (!saved.objectType().equals(objectType(object))) {
-				return false;
+				return Identity.MISMATCH;
 			}
 			Vector3f pos = object.getWorldPosition();
 			if (pos == null) {
-				return false;
+				return Identity.UNCERTAIN;
 			}
 			float max = MAX_IDENTITY_DISTANCE * MAX_IDENTITY_DISTANCE;
 			if (pos.distanceSquared(saved.worldX(), saved.worldY(), saved.worldZ()) > max) {
-				return false;
+				return Identity.MISMATCH;
 			}
 		}
-		return true;
+		return Identity.MATCH;
 	}
 
 	private void schedule(long storageId, float delaySeconds) {
@@ -431,15 +446,21 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		}
 	}
 
-	/** Startup: verify every row, then fire overdue resets or schedule remaining delay. */
+	/** Startup: drop only clear mismatches, then fire overdue resets or schedule remaining delay. */
 	private void sweepAndResume() {
 		long now = System.currentTimeMillis();
 		for (RefillChest chest : repository.findAll()) {
-			if (!verifyOrDrop(chest)) {
+			Identity id = identity(chest, World.getStorage(chest.storageId()), findObject(chest));
+			if (id == Identity.MISMATCH) {
+				drop(chest.storageId());
 				continue;
 			}
 			Long next = chest.nextRefill();
 			if (next == null) {
+				continue;
+			}
+			if (id == Identity.UNCERTAIN) {
+				schedule(chest.storageId(), STORAGE_RETRY_SECONDS);
 				continue;
 			}
 			if (next <= now) {
@@ -448,6 +469,16 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				schedule(chest.storageId(), (next - now) / 1000f);
 			}
 		}
+	}
+
+	/**
+	 * Identity outcome for a registered chest.
+	 * Null storage is UNCERTAIN so existing chests are never dropped on a miss.
+	 */
+	private enum Identity {
+		MATCH,
+		UNCERTAIN,
+		MISMATCH
 	}
 
 	@FunctionalInterface

@@ -59,7 +59,7 @@ State is stored automatically in:
 Plugins/RespawnChest/refill.db
 ```
 
-On startup, missing or replaced chests are cleaned out of the database so dead entries do not stick around.
+On startup, only clearly replaced or invalid chests are removed from the database. A missing storage lookup alone does not delete a registration.
 
 ## License
 
