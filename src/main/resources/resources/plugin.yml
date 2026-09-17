@@ -1,6 +1,6 @@
 name: RespawnChest
 main: de.mahagst.risingworld.respawnchest.RespawnChestPlugin
-version: 1.2.4
+version: 1.2.5
 api: 0.9.3
 author: mahagst
 description: Refill chests after loot with RESET templates
