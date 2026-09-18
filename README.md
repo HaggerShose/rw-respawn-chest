@@ -62,7 +62,7 @@ Plugins/RespawnChest/<WorldName>.db
 
 Older installs used `refill.db`. On first start the plugin moves that file to the world db if the world file does not exist yet.
 
-On startup the plugin waits until the world is initialized plus 5 seconds, then drops any registered chest whose storage no longer exists (`World.getAllStorages()`). A pending due that fires later and finds no storage is dropped the same way.
+On startup the plugin waits until the world is initialized plus 5 seconds, then drops any registered chest whose storage no longer exists (`World.getStorage(id)` per registration). A pending due that fires later and finds no storage is dropped the same way.
 Pending due times use the world's accumulated active time (`Server.getIngameTimestamp`), not wall-clock -- so pause and empty-server idle do not burn the refill delay. Legacy unix `next_refill` values from older plugin builds are converted once on load. Remaining delay survives a server restart.
 
 ## License

@@ -3,10 +3,8 @@ package de.mahagst.risingworld.respawnchest;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import net.risingworld.api.Plugin;
 import net.risingworld.api.Server;
@@ -32,7 +30,7 @@ final class RefillService {
 	private static final long TICK_BUDGET_NS = 250_000_000L;
 	static final float TICK_SECONDS = 1f;
 	/** Extra wait after {@link World#isInitialized()} before orphan sweep. */
-	static final float READY_DELAY_SECONDS = 5f;
+	static final float READY_DELAY_SECONDS = 30f;
 	/** Failed restores before dropping the registration. */
 	private static final int MAX_RESTORE_ATTEMPTS = 3;
 	/**
@@ -362,7 +360,7 @@ final class RefillService {
 	}
 
 	/**
-	 * Drop registered ids missing from {@link World#getAllStorages()}, convert legacy
+	 * Drop registered ids where {@link World#getStorage(long)} is null, convert legacy
 	 * unix {@code next_refill}, seed {@link #pendingById}, start the tick if needed.
 	 */
 	private void sweepAndResume() {
@@ -375,10 +373,9 @@ final class RefillService {
 			System.out.println("[RespawnChest] Startup sweep: no registered chests");
 			return;
 		}
-		Set<Long> live = liveStorageIds();
 		int dropped = 0;
 		for (Long id : new ArrayList<>(chests.keySet())) {
-			if (!live.contains(id)) {
+			if (World.getStorage(id) == null) {
 				drop(id);
 				dropped++;
 			}
@@ -396,20 +393,6 @@ final class RefillService {
 		ensureTick();
 		System.out.println("[RespawnChest] Startup sweep: dropped " + dropped
 				+ " missing, " + pendingById.size() + " pending");
-	}
-
-	private static Set<Long> liveStorageIds() {
-		Set<Long> live = new HashSet<>();
-		Storage[] all = World.getAllStorages();
-		if (all == null) {
-			return live;
-		}
-		for (Storage storage : all) {
-			if (storage != null) {
-				live.add(storage.getID());
-			}
-		}
-		return live;
 	}
 
 	private void onTick() {

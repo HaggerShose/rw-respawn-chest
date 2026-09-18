@@ -25,13 +25,13 @@ Two runtime states only: **idle** (`next_refill == null`) and **pending**. Playe
 
 ## Layout
 
-| File                                       | Role                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `RespawnChestPlugin`                       | Lifecycle, admin gate, commands, LoS, loot event stubs                                     |
+| File                                       | Role                                                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `RespawnChestPlugin`                       | Lifecycle, admin gate, commands, LoS, loot event stubs                                                 |
 | `RefillService`                            | RAM chests+templates, ready+sweep, pending tick, register/update/now/remove/info/list, identity, RESET |
-| `RefillRepository`                         | SQLite only                                                                                |
-| `RefillChest`, `TemplateItem`, `Snapshot`  | Row + capture/restore                                                                      |
-| `LegacyRespawnDbMigration`, `SqliteSchema` | Untouched file migrate / `ensureColumn`                                                    |
+| `RefillRepository`                         | SQLite only                                                                                            |
+| `RefillChest`, `TemplateItem`, `Snapshot`  | Row + capture/restore                                                                                  |
+| `LegacyRespawnDbMigration`, `SqliteSchema` | Untouched file migrate / `ensureColumn`                                                                |
 
 No extra packages. No client mods.
 
@@ -91,8 +91,7 @@ onEnable
   -> skip / drop rows with empty templates; skip a chest for this session if item query fails
   -> register listeners
   -> wait World.isInitialized() + 5s
-  -> World.getAllStorages() -> HashSet of ids
-  -> drop any registered id not in the set
+  -> for each registered id: World.getStorage(id) null -> drop
   -> migrate legacy unix next_refill to world time (preserve remaining)
   -> seed pendingById from remaining next_refill; start tick if pending > 0
 
@@ -161,7 +160,7 @@ Copy [`_tools/templates/SqliteSchema.java`](../_tools/templates/SqliteSchema.jav
 
 Used on due RESET and focused commands that already have a live storage:
 
-1. `World.getStorage(storage_id)` missing -> **drop** (startup sweep via `getAllStorages`, or mid-session when a pending due fires).
+1. `World.getStorage(storage_id)` missing -> **drop** (startup sweep per registered id, or mid-session when a pending due fires).
 2. Storage transient, or `storage.getCreationDate()` != saved -> drop.
 
 Chunk/object fields (`object_id`, chunk, world pos, `object_type`) stay in the DB for list/display and register metadata; they are not part of runtime identity. No `UNCERTAIN` retry loop.
