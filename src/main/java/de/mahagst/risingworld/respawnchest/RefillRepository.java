@@ -201,7 +201,12 @@ final class RefillRepository {
 		void run(Connection conn) throws SQLException;
 	}
 
-	/** null next_refill means idle (no timer pending). */
+	/**
+	 * Set or clear pending refill due time.
+	 *
+	 * @param nextRefill world-time ms when due ({@link net.risingworld.api.Server#getIngameTimestamp}),
+	 *                   or null for idle (no timer pending)
+	 */
 	void setNextRefill(long storageId, Long nextRefill) {
 		var sql = "UPDATE refill_chests SET next_refill = ? WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {

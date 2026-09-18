@@ -9,7 +9,7 @@ Fill a chest, look at it, register it once. After players loot it, a timer start
 1. Place a normal chest and put the desired loot inside.
 2. Look at the chest.
 3. Run `/make-refill <minutes>`.
-4. When someone takes items out (into inventory or dropped on the ground), a one-shot timer starts.
+4. When someone takes items out (into inventory or dropped on the ground), a one-shot timer starts (delay uses **world time**: pause / empty idle does not count).
 5. When the timer ends, the chest is cleared and the original template is restored (RESET).
 
 Notes:
@@ -35,7 +35,7 @@ Look at the chest first, then use chat or the `^` console **with** a leading `/`
 
 ### Interval
 
-- `<minutes>` is the delay after loot until reset.
+- `<minutes>` is the delay after loot until reset, measured in **world time** (paused / empty idle does not count).
 - `0` (or less) -> **5 seconds** (for testing).
 - Maximum: **24 hours** (`1440` minutes).
 
@@ -62,6 +62,7 @@ Plugins/RespawnChest/<WorldName>.db
 Older installs used `refill.db`. On first start the plugin moves that file to the world db if the world file does not exist yet.
 
 On startup, only clearly replaced or invalid chests are removed from the database. A missing storage lookup alone does not delete a registration.
+Pending due times use the world's accumulated active time (`Server.getIngameTimestamp`), not wall-clock -- so pause and empty-server idle do not burn the refill delay. Legacy unix `next_refill` values from older plugin builds are converted once on load.
 
 ## License
 

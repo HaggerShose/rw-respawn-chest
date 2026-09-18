@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import net.risingworld.api.Plugin;
+import net.risingworld.api.Server;
 import net.risingworld.api.Timer;
 import net.risingworld.api.World;
 import net.risingworld.api.database.Database;
@@ -24,6 +25,7 @@ import net.risingworld.api.utils.Vector3f;
 /**
  * Single plugin class: admin commands, loot triggers, one-shot refill timers, identity cleanup.
  * Idle registered chests do nothing until loot starts a timer.
+ * Pending due times use {@link Server#getIngameTimestamp()} (world time); pause does not advance them.
  */
 public class RespawnChestPlugin extends Plugin implements Listener {
 	static final float LOS_DISTANCE = 5f;
@@ -33,6 +35,11 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	static final int MAX_INTERVAL_SECONDS = 24 * 60 * 60;
 	/** Effective delay when /make-refill gets 0 or negative minutes (quick test). */
 	static final int MIN_TEST_SECONDS = 5;
+	/**
+	 * Values at or above this are treated as legacy unix {@code next_refill}
+	 * (pre-ingame-timestamp). ~2001-09-09 in wall-clock ms; playtime ms stay far below.
+	 */
+	private static final long LEGACY_UNIX_NEXT_REFILL_MIN = 1_000_000_000_000L;
 	private static final Set<String> ALLOWED_UIDS = Set.of(
 			"76561198002368372");
 
@@ -249,7 +256,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		boolean pending = chest.nextRefill() != null;
 		String rest = "-";
 		if (pending) {
-			rest = Math.max(0, (chest.nextRefill() - System.currentTimeMillis()) / 1000) + "s";
+			rest = Math.max(0, (chest.nextRefill() - worldNow()) / 1000) + "s";
 		}
 		player.sendTextMessage(
 				"Refill Chest: interval " + chest.intervalSeconds() + "s, pending "
@@ -327,7 +334,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		if (id != Identity.MATCH) {
 			return;
 		}
-		repository.setNextRefill(storageId, System.currentTimeMillis() + chest.intervalSeconds() * 1000L);
+		repository.setNextRefill(storageId, worldNow() + chest.intervalSeconds() * 1000L);
 		schedule(storageId, chest.intervalSeconds());
 	}
 
@@ -338,6 +345,16 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			return;
 		}
 		RefillChest chest = chestOpt.get();
+		Long next = chest.nextRefill();
+		if (next == null) {
+			cancelTimer(storageId);
+			return;
+		}
+		long now = worldNow();
+		if (next > now) {
+			schedule(storageId, (next - now) / 1000f);
+			return;
+		}
 		Identity id = identity(chest, World.getStorage(storageId), findObject(chest));
 		if (id == Identity.MISMATCH) {
 			drop(storageId);
@@ -448,9 +465,11 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 		}
 	}
 
-	/** Startup: drop only clear mismatches, then fire overdue resets or schedule remaining delay. */
+	/**
+	 * Startup: drop only clear mismatches, migrate legacy unix {@code next_refill},
+	 * then fire overdue resets or schedule remaining delay (world time).
+	 */
 	private void sweepAndResume() {
-		long now = System.currentTimeMillis();
 		for (RefillChest chest : repository.findAll()) {
 			Identity id = identity(chest, World.getStorage(chest.storageId()), findObject(chest));
 			if (id == Identity.MISMATCH) {
@@ -461,16 +480,43 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			if (next == null) {
 				continue;
 			}
+			next = migrateLegacyNextRefill(chest.storageId(), next);
 			if (id == Identity.UNCERTAIN) {
 				schedule(chest.storageId(), STORAGE_RETRY_SECONDS);
 				continue;
 			}
+			long now = worldNow();
 			if (next <= now) {
 				restoreQuietly(chest);
 			} else {
 				schedule(chest.storageId(), (next - now) / 1000f);
 			}
 		}
+	}
+
+	/**
+	 * Accumulated active world time in ms ({@link Server#getIngameTimestamp()}).
+	 * Pause and empty-world idle do not advance this clock.
+	 */
+	private static long worldNow() {
+		return Server.getIngameTimestamp();
+	}
+
+	/**
+	 * One-shot: rewrite unix-ms {@code next_refill} to world time, preserving remaining delay.
+	 *
+	 * @return converted due time, or {@code next} unchanged
+	 */
+	private Long migrateLegacyNextRefill(long storageId, long next) {
+		if (next < LEGACY_UNIX_NEXT_REFILL_MIN) {
+			return next;
+		}
+		long remainingMs = Math.max(0L, next - System.currentTimeMillis());
+		long converted = worldNow() + remainingMs;
+		repository.setNextRefill(storageId, converted);
+		System.out.println("[RespawnChest] Migrated legacy next_refill for #" + storageId
+				+ " (remaining " + (remainingMs / 1000) + "s)");
+		return converted;
 	}
 
 	/**

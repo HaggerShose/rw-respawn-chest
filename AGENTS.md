@@ -14,8 +14,8 @@ Javadoc: local under `RisingWorld/Data/SDK`, online at <https://javadoc.rising-w
 3. /make-refill 60
 4. Plugin stores storage/object id + chunk + position + type + creation_date + snapshot + interval
 5. Player takes loot from the chest (into inventory or drop to ground)
-6. Plugin starts a one-shot timer (if none is pending)
-7. Timer fires -> identity check -> RESET (clear + template slot-exact)
+6. Plugin persists next_refill = getIngameTimestamp() + interval; one-shot Timer (if none pending)
+7. Timer -> re-check world time -> identity check -> RESET (clear + template slot-exact)
 ```
 
 No continuous poll. Idle chests cost almost nothing. Players install nothing.
@@ -71,14 +71,16 @@ Triggers: `PlayerStorageToInventoryEvent` (chest -> inventory) and `PlayerDropIt
 Take event on storage
   -> RAM Set miss: return (no SQLite)
   -> findChest; ghost ID: remove from Set
-  -> if next_refill == null: next_refill = now + interval, one-shot timer
+  -> if next_refill == null: next_refill = getIngameTimestamp() + interval, one-shot timer
   -> further looting: do not restart timer
-  -> timer: identity -> RESET -> next_refill = null
+  -> timer: re-check world time (reschedule if still early / pause) -> identity -> RESET -> next_refill = null
 ```
 
 At most one pending `net.risingworld.api.Timer` per chest (`repetitions = 0`). `/refill-remove` and `onDisable` kill timers.
 
-On startup: load registered `storage_id`s into a RAM `Set`, identity-check **all** DB rows and delete orphans (`drop` also removes the id from the Set); then schedule pending `next_refill` or RESET immediately if due. Register the event listener last.
+`next_refill` is world time (`Server.getIngameTimestamp` ms), not wall clock: pause / empty idle does not advance it. Session `Timer` is only a wake-up; due is always re-checked against world time. `created_at` stays unix wall clock.
+
+On startup: load registered `storage_id`s into a RAM `Set`, identity-check **all** DB rows and delete orphans (`drop` also removes the id from the Set); migrate legacy unix `next_refill` to world time (preserve remaining); then schedule pending `next_refill` or RESET immediately if due. Register the event listener last.
 
 ## Persistence: SQLite
 
@@ -96,8 +98,8 @@ refill_chests:
   object_type,              -- Objects.ObjectDefinition.name
   creation_date,            -- Storage.getCreationDate()
   interval_seconds,
-  next_refill,              -- unix ms, NULL = idle
-  created_at
+  next_refill,              -- world ms (Server.getIngameTimestamp), NULL = idle
+  created_at                -- unix wall-clock ms
 
 refill_items:
   storage_id + slot PK,
