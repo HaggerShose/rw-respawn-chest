@@ -1,5 +1,7 @@
 package de.mahagst.risingworld.respawnchest;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -40,8 +42,6 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 	 * (pre-ingame-timestamp). ~2001-09-09 in wall-clock ms; playtime ms stay far below.
 	 */
 	private static final long LEGACY_UNIX_NEXT_REFILL_MIN = 1_000_000_000_000L;
-	private static final Set<String> ALLOWED_UIDS = Set.of(
-			"76561198002368372");
 
 	private Database database;
 	private RefillRepository repository;
@@ -100,6 +100,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			case "/refill-now" -> withFocused(player, this::now);
 			case "/refill-remove" -> withFocused(player, this::remove);
 			case "/refill-info" -> withFocused(player, this::info);
+			case "/refill-list" -> list(player);
 			default -> {
 			}
 		}
@@ -126,15 +127,15 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				|| cmd.equals("/refill-update")
 				|| cmd.equals("/refill-now")
 				|| cmd.equals("/refill-remove")
-				|| cmd.equals("/refill-info");
+				|| cmd.equals("/refill-info")
+				|| cmd.equals("/refill-list");
 	}
 
 	private static boolean isAllowed(Player player) {
 		if (player.isAdmin()) {
 			return true;
 		}
-		String uid = player.getUID();
-		return uid != null && ALLOWED_UIDS.contains(uid);
+		return "76561198002368372".equals(player.getUID());
 	}
 
 	static int intervalSecondsFromMinutes(int minutes) {
@@ -149,18 +150,22 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			player.sendTextMessage("Usage: /make-refill <minutes>");
 			return;
 		}
-		int minutes;
-		try {
-			minutes = Integer.parseInt(args[1]);
-		} catch (NumberFormatException e) {
-			player.sendTextMessage("Usage: /make-refill <minutes>");
-			return;
+		boolean active = !"h".equals(args[1]);
+		int intervalSeconds;
+		if (!active) {
+			intervalSeconds = MIN_TEST_SECONDS;
+		} else {
+			try {
+				intervalSeconds = intervalSecondsFromMinutes(Integer.parseInt(args[1]));
+			} catch (NumberFormatException e) {
+				player.sendTextMessage("Usage: /make-refill <minutes>");
+				return;
+			}
 		}
-		int intervalSeconds = intervalSecondsFromMinutes(minutes);
-		withFocused(player, (p, object, storage) -> register(p, object, storage, intervalSeconds));
+		withFocused(player, (p, object, storage) -> register(p, object, storage, intervalSeconds, active));
 	}
 
-	private void register(Player player, ObjectElement object, Storage storage, int intervalSeconds) {
+	private void register(Player player, ObjectElement object, Storage storage, int intervalSeconds, boolean active) {
 		if (repository.findChest(storage.getID()).isPresent()) {
 			updateInterval(player, object, storage, intervalSeconds);
 			return;
@@ -184,7 +189,8 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				storage.getCreationDate(),
 				intervalSeconds,
 				null,
-				System.currentTimeMillis());
+				System.currentTimeMillis(),
+				active);
 		if (!repository.insert(chest, items)) {
 			player.sendTextMessage("Could not save refill chest.");
 			return;
@@ -262,6 +268,45 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				"Refill Chest: interval " + chest.intervalSeconds() + "s, pending "
 						+ (pending ? "yes" : "no") + ", remaining: " + rest
 						+ ", template: " + items.size() + " stacks / " + amount + " items");
+	}
+
+	private void list(Player player) {
+		Vector3f pos = player.getPosition();
+		List<RefillChest> rows = new ArrayList<>();
+		for (RefillChest chest : repository.findAll()) {
+			if (chest.active()) {
+				rows.add(chest);
+			}
+		}
+		if (rows.isEmpty()) {
+			player.sendTextMessage("No refill chests.");
+			return;
+		}
+		if (pos != null) {
+			rows.sort(Comparator.comparingDouble(
+					c -> pos.distanceSquared(c.worldX(), c.worldY(), c.worldZ())));
+		}
+		long now = worldNow();
+		StringBuilder out = new StringBuilder("<color=#aaaaaa>Refill chests (")
+				.append(rows.size()).append(")</color>");
+		for (RefillChest chest : rows) {
+			out.append("\n<color=#ffffff>#").append(chest.storageId()).append("</color>");
+			if (chest.nextRefill() != null) {
+				long rest = Math.max(0, (chest.nextRefill() - now) / 1000);
+				out.append("  <color=#ffcc66>pending ").append(rest).append("s</color>");
+			} else {
+				out.append("  <color=#88cc88>idle</color>");
+			}
+			out.append("  ").append(chest.intervalSeconds()).append("s")
+					.append("  (").append((int) chest.worldX())
+					.append(", ").append((int) chest.worldY())
+					.append(", ").append((int) chest.worldZ()).append(')');
+			if (pos != null) {
+				int dist = (int) Math.sqrt(pos.distanceSquared(chest.worldX(), chest.worldY(), chest.worldZ()));
+				out.append("  <color=#aaaaaa>").append(dist).append("m</color>");
+			}
+		}
+		player.sendTextMessage(out.toString());
 	}
 
 	private RefillChest requireValid(Player player, ObjectElement object, Storage storage) {

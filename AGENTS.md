@@ -33,6 +33,7 @@ Admin commands reply only to the executing admin. Auto-RESET is silent (no chat)
 | `/refill-now`            | Immediate RESET to template, clear pending                                                                      |
 | `/refill-remove`         | Remove from DB, kill pending timer                                                                              |
 | `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary                                                  |
+| `/refill-list`           | All registered chests, nearest first (pos, interval, pending remaining, distance)                               |
 
 Focus: `Player.getObjectElementInLineOfSight(5f, callback)`.
 

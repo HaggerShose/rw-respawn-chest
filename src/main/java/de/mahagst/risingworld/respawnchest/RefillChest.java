@@ -14,5 +14,6 @@ record RefillChest(
 		long creationDate,
 		int intervalSeconds,
 		Long nextRefill,
-		long createdAt) {
+		long createdAt,
+		boolean active) {
 }

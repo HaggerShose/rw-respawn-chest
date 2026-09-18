@@ -34,7 +34,8 @@ final class RefillRepository {
 				  creation_date INTEGER NOT NULL,
 				  interval_seconds INTEGER NOT NULL,
 				  next_refill INTEGER,
-				  created_at INTEGER NOT NULL
+				  created_at INTEGER NOT NULL,
+				  active INTEGER NOT NULL DEFAULT 1
 				)
 				""");
 		database.execute("""
@@ -56,6 +57,7 @@ final class RefillRepository {
 				)
 				""");
 		SqliteSchema.ensureColumn(database, "refill_items", "modifier", "TEXT");
+		SqliteSchema.ensureColumn(database, "refill_chests", "active", "INTEGER NOT NULL DEFAULT 1");
 	}
 
 	Optional<RefillChest> findChest(long storageId) {
@@ -119,8 +121,8 @@ final class RefillRepository {
 				INSERT INTO refill_chests (
 				  storage_id, object_id, chunk_x, chunk_y, chunk_z,
 				  world_x, world_y, world_z, object_type, creation_date,
-				  interval_seconds, next_refill, created_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				  interval_seconds, next_refill, created_at, active
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""";
 		return inTransaction(conn -> {
 			try (var prep = conn.prepareStatement(sql)) {
@@ -262,6 +264,7 @@ final class RefillRepository {
 			prep.setLong(12, chest.nextRefill());
 		}
 		prep.setLong(13, chest.createdAt());
+		prep.setInt(14, chest.active() ? 1 : 0);
 	}
 
 	private static String readModifier(java.sql.ResultSet result) throws SQLException {
@@ -288,6 +291,7 @@ final class RefillRepository {
 				result.getLong("creation_date"),
 				result.getInt("interval_seconds"),
 				next,
-				result.getLong("created_at"));
+				result.getLong("created_at"),
+				result.getInt("active") != 0);
 	}
 }

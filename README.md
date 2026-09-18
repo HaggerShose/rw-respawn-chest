@@ -32,6 +32,7 @@ Look at the chest first, then use chat or the `^` console **with** a leading `/`
 | `/refill-now`            | Reset immediately and clear any pending timer.                                                              |
 | `/refill-remove`         | Unregister the chest.                                                                                       |
 | `/refill-info`           | Show interval, pending state, remaining time, and template size.                                            |
+| `/refill-list`           | List registered chests nearest-first (position, interval, pending remaining, distance).                     |
 
 ### Interval
 

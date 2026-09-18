@@ -48,13 +48,14 @@
 </woltlab-spoiler>
 <p></p>
 <p><span style="color:#696969;"><strong>Commands</strong></span></p>
-<p><span style="color:#696969;">Only server admins listed in <em>Server_Admins</em> in <em>server.properties</em> can use these commands.</span></p>
+<p><span style="color:#696969;">Only server admins can use these commands.</span></p>
 <ul>
-	<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes&gt;</em> </strong> – registers the targeted chest and saves its current contents as the template.</span><br><span style="color:#696969;">it also can be used to update a timer of an already registered chest</span></li>
-	<li><span style="color:#696969;"><strong>/refill-update</strong> – replaces the saved template with the chest's current contents</span></li>
-	<li><span style="color:#696969;"><strong>/refill-now</strong> – resets the chest immediately</span></li>
-	<li><span style="color:#696969;"><strong>/refill-remove</strong> – unregisters the chest</span></li>
-	<li><span style="color:#696969;"><strong>/refill-info</strong> – shows the current refill status</span>
+	<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes&gt;</em> </strong> - registers the targeted chest and saves its current contents as the template.</span><br><span style="color:#696969;">it also can be used to update a timer of an already registered chest</span></li>
+	<li><span style="color:#696969;"><strong>/refill-update</strong> - replaces the saved template with the chest's current contents</span></li>
+	<li><span style="color:#696969;"><strong>/refill-now</strong> - resets the chest immediately</span></li>
+	<li><span style="color:#696969;"><strong>/refill-remove</strong> - unregisters the chest</span></li>
+	<li><span style="color:#696969;"><strong>/refill-info</strong> - shows the current refill status</span></li>
+	<li><span style="color:#696969;"><strong>/refill-list</strong> - lists all registered chests (nearest first: state, interval, coordinates, distance)</span>
 	<p><br></p></li>
 </ul>
 <p></p>
@@ -64,13 +65,14 @@
 <p><span style="color:#696969;">The chest is not a hotel. It is a template with discipline.</span></p>
 <woltlab-spoiler data-label="Deutsch">
 	<p><span style="color:#696969;"><strong>Befehle</strong></span></p>
-	<p><span style="color:#696969;">Nur Server-Admins aus <em>Server_Admins</em> in <em>server.properties</em> können diese Befehle verwenden.</span></p>
+	<p><span style="color:#696969;">Nur Server-Admins können diese Befehle verwenden.</span></p>
 	<ul>
-		<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes<span></span></em><em>&gt;</em> </strong> – registriert die anvisierte Kiste und speichert ihren aktuellen Inhalt als Template<br></span><span style="color:#696969;">kann auch dazu verwendet werden den Timer einer schon registrierten Kiste zu updaten</span></li>
-		<li><span style="color:#696969;"><strong>/refill-update</strong> – ersetzt das gespeicherte Template durch den aktuellen Inhalt der Kiste</span></li>
-		<li><span style="color:#696969;"><strong>/refill-now</strong> – setzt die Kiste sofort zurück</span></li>
-		<li><span style="color:#696969;"><strong>/refill-remove</strong> – entfernt die Kiste aus dem Plugin</span></li>
-		<li><span style="color:#696969;"><strong>/refill-info</strong> – zeigt den aktuellen Status der Kiste</span>
+		<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes<span></span></em><em>&gt;</em> </strong> - registriert die anvisierte Kiste und speichert ihren aktuellen Inhalt als Template<br></span><span style="color:#696969;">kann auch dazu verwendet werden den Timer einer schon registrierten Kiste zu updaten</span></li>
+		<li><span style="color:#696969;"><strong>/refill-update</strong> - ersetzt das gespeicherte Template durch den aktuellen Inhalt der Kiste</span></li>
+		<li><span style="color:#696969;"><strong>/refill-now</strong> - setzt die Kiste sofort zurück</span></li>
+		<li><span style="color:#696969;"><strong>/refill-remove</strong> - entfernt die Kiste aus dem Plugin</span></li>
+		<li><span style="color:#696969;"><strong>/refill-info</strong> - zeigt den aktuellen Status der Kiste</span></li>
+		<li><span style="color:#696969;"><strong>/refill-list</strong> - listet alle registrierten Kisten (nächste zuerst: Status, Intervall, Koordinaten, Distanz)</span>
 		<p><br></p></li>
 	</ul>
 	<p><span style="color:#696969;"><strong>0 Minuten</strong> entsprechen zum Testen einem Timer von 5 Sekunden.</span></p>
@@ -88,7 +90,7 @@
 <p><span style="color:#696969;">Built against Rising World Plugin API <strong>0.9.3</strong>.</span></p>
 <p><span style="color:#696969;">License: <strong>MIT</strong></span></p>
 <p><span style="color:#696969;">Source code:</span></p>
-<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub – rw-respawn-chest</a></span></p>
+<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub - rw-respawn-chest</a></span></p>
 <p><span style="color:#696969;"><strong>Bugs / Feedback</strong></span></p>
 <p><span style="color:#696969;">If something behaves strangely, feel free to post it here.</span></p>
 <p><span style="color:#696969;">If you are reporting a problem with a registered chest, including the output of <strong>/refill-info</strong> can make troubleshooting easier.</span></p>
@@ -105,7 +107,7 @@
 	<p><span style="color:#696969;">Entwickelt gegen die Rising World Plugin API <strong>0.9.3</strong>.</span></p>
 	<p><span style="color:#696969;">Lizenz: <strong>MIT</strong></span></p>
 	<p><span style="color:#696969;">Quellcode:</span></p>
-	<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub – rw-respawn-chest</a></span></p>
+	<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub - rw-respawn-chest</a></span></p>
 	<p><span style="color:#696969;"><strong>Bugs / Feedback</strong></span></p>
 	<p><span style="color:#696969;">Falls sich eine Kiste merkwürdig verhält, gerne hier melden.</span></p>
 	<p><span style="color:#696969;">Bei Problemen mit einer registrierten Kiste hilft die Ausgabe von <strong>/refill-info</strong> bei der Fehlersuche.</span></p>
