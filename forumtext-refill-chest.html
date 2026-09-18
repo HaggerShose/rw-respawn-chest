@@ -1,0 +1,115 @@
+<p><span style="color:#696969;">Hello everyone,</span></p>
+<p><span style="color:#696969;">you probably know the problem: there are loot chests at spawn, someone empties them, and sooner or later an admin has to refill them by hand.</span></p>
+<p><span style="color:#696969;"><br></span></p>
+<p><span style="color:#696969;"><strong>Respawn Chest</strong> takes care of exactly that.</span></p>
+<p><span style="color:#696969;">Fill a chest once and save its contents as a template. As soon as a player removes an item, a timer starts. When the timer expires, the chest is cleared and restored to its saved contents.</span></p>
+<p><span style="color:#696969;"><br></span></p>
+<p><span style="color:#696969;">The plugin is deliberately lightweight. Registered chests are not constantly checked in the background, so even a large number of them should have practically no noticeable impact on server performance.</span></p>
+<woltlab-spoiler data-label="Deutsch">
+	<p><span style="color:#696969;">Hallo zusammen,</span></p>
+	<p><span style="color:#696969;">ihr kennt das Problem vermutlich: Am Spawn stehen Loot-Kisten, jemand räumt sie leer und irgendwann darf ein Admin sie wieder von Hand auffüllen.</span></p>
+	<p><span style="color:#696969;"><br></span></p>
+	<p><span style="color:#696969;"><strong>Respawn Chest</strong> nimmt euch genau diesen Unsinn ab.</span></p>
+	<p><span style="color:#696969;">Einmal eine Kiste befüllen und ihren Inhalt als Template speichern. Sobald ein Spieler etwas daraus entnimmt, startet ein Timer. Nach Ablauf wird die Kiste geleert und mit dem gespeicherten Inhalt wiederhergestellt.</span></p>
+	<p><span style="color:#696969;"><br></span></p>
+	<p><span style="color:#696969;">Das Plugin ist bewusst leichtgewichtig aufgebaut. Registrierte Kisten werden nicht ständig im Hintergrund abgefragt, weshalb auch eine große Anzahl davon praktisch keinen spürbaren Einfluss auf die Server-Performance haben sollte.</span></p>
+</woltlab-spoiler>
+<p></p>
+<p><span style="color:#696969;"><strong>How it works</strong></span></p>
+<ul>
+	<li><span style="color:#696969;">Place and fill a normal chest</span></li>
+	<li><span style="color:#696969;">Look at the chest</span></li>
+	<li><span style="color:#696969;">Use [tt]/make-refill &lt;minutes&gt;[/tt] in Chat</span></li>
+	<li><span style="color:#696969;">A player removes an item</span></li>
+	<li><span style="color:#696969;">The refill timer starts</span></li>
+	<li><span style="color:#696969;">The world keeps turning</span></li>
+	<li><span style="color:#696969;">When the timer expires, the chest is cleared and restored from the saved template</span>
+	<p><br></p></li>
+</ul>
+<p></p>
+<p><span style="color:#696969;">Putting items into the chest does <strong>not</strong> start the timer.</span></p>
+<p><span style="color:#696969;">If a timer is already running, removing additional items does not restart or extend it.</span></p>
+<p><span style="color:#696969;">Automatic resets happen silently, without chat spam.</span></p>
+<woltlab-spoiler data-label="Deutsch">
+	<p><span style="color:#696969;"><strong>So funktioniert es</strong></span></p>
+	<ul>
+		<li><span style="color:#696969;">Normale Kiste platzieren und befüllen</span></li>
+		<li><span style="color:#696969;">Kiste anschauen</span></li>
+		<li><span style="color:#696969;">[tt]/make-refill &lt;minutes&gt;[/tt] im Chat eingeben</span></li>
+		<li><span style="color:#696969;">Ein Spieler nimmt ein Item heraus</span></li>
+		<li><span style="color:#696969;">Der Respawn-Timer startet</span></li>
+		<li><span style="color:#696969;">Die Welt dreht sich weiter</span></li>
+		<li><span style="color:#696969;">Nach Ablauf wird die Kiste geleert und aus dem gespeicherten Template wiederhergestellt</span>
+		<p><br></p></li>
+	</ul>
+	<p><span style="color:#696969;">Items hineinzulegen startet <strong>keinen</strong> Timer.</span></p>
+	<p><span style="color:#696969;">Läuft bereits ein Timer, wird er durch weitere Entnahmen weder neu gestartet noch verlängert.</span></p>
+	<p><span style="color:#696969;">Der automatische Reset erfolgt still und erzeugt keinen Chat-Spam.</span></p>
+</woltlab-spoiler>
+<p></p>
+<p><span style="color:#696969;"><strong>Commands</strong></span></p>
+<p><span style="color:#696969;">Only server admins listed in <em>Server_Admins</em> in <em>server.properties</em> can use these commands.</span></p>
+<ul>
+	<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes&gt;</em> </strong> – registers the targeted chest and saves its current contents as the template.</span><br><span style="color:#696969;">it also can be used to update a timer of an already registered chest</span></li>
+	<li><span style="color:#696969;"><strong>/refill-update</strong> – replaces the saved template with the chest's current contents</span></li>
+	<li><span style="color:#696969;"><strong>/refill-now</strong> – resets the chest immediately</span></li>
+	<li><span style="color:#696969;"><strong>/refill-remove</strong> – unregisters the chest</span></li>
+	<li><span style="color:#696969;"><strong>/refill-info</strong> – shows the current refill status</span>
+	<p><br></p></li>
+</ul>
+<p></p>
+<p><span style="color:#696969;">A value of <strong>0 minutes</strong> uses a 5-second timer for testing.</span></p>
+<p><span style="color:#696969;">Maximum refill time: <strong>24 hours</strong>.</span></p>
+<p><span style="color:#696969;"><strong>Important:</strong> When a chest resets, everything currently inside it is removed before the saved template is restored.</span></p>
+<p><span style="color:#696969;">The chest is not a hotel. It is a template with discipline.</span></p>
+<woltlab-spoiler data-label="Deutsch">
+	<p><span style="color:#696969;"><strong>Befehle</strong></span></p>
+	<p><span style="color:#696969;">Nur Server-Admins aus <em>Server_Admins</em> in <em>server.properties</em> können diese Befehle verwenden.</span></p>
+	<ul>
+		<li><span style="color:#696969;"><strong>/make-refill <em>&lt;minutes<span></span></em><em>&gt;</em> </strong> – registriert die anvisierte Kiste und speichert ihren aktuellen Inhalt als Template<br></span><span style="color:#696969;">kann auch dazu verwendet werden den Timer einer schon registrierten Kiste zu updaten</span></li>
+		<li><span style="color:#696969;"><strong>/refill-update</strong> – ersetzt das gespeicherte Template durch den aktuellen Inhalt der Kiste</span></li>
+		<li><span style="color:#696969;"><strong>/refill-now</strong> – setzt die Kiste sofort zurück</span></li>
+		<li><span style="color:#696969;"><strong>/refill-remove</strong> – entfernt die Kiste aus dem Plugin</span></li>
+		<li><span style="color:#696969;"><strong>/refill-info</strong> – zeigt den aktuellen Status der Kiste</span>
+		<p><br></p></li>
+	</ul>
+	<p><span style="color:#696969;"><strong>0 Minuten</strong> entsprechen zum Testen einem Timer von 5 Sekunden.</span></p>
+	<p><span style="color:#696969;">Maximale Respawn-Zeit: <strong>24 Stunden</strong>.</span></p>
+	<p><span style="color:#696969;"><strong>Wichtig:</strong> Beim Reset wird der komplette aktuelle Inhalt der Kiste entfernt, bevor das gespeicherte Template wiederhergestellt wird.</span></p>
+	<p><span style="color:#696969;">Die Kiste ist kein Hotel, sondern ein Template mit Disziplin.</span></p>
+</woltlab-spoiler>
+<p></p>
+<p><span style="color:#696969;"><strong>Download / Installation</strong></span></p>
+<p><span style="color:#696969;">Latest release:</span></p>
+<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest/releases/latest">Respawn Chest - Latest Release</a></span></p>
+<p><span style="color:#696969;">Place the JAR here:</span></p>
+<p><span style="color:#696969;">[tt]./plugins/RespawnChest/RespawnChest.jar[/tt]</span></p>
+<p><span style="color:#696969;">Restart the server afterwards.</span></p>
+<p><span style="color:#696969;">Built against Rising World Plugin API <strong>0.9.3</strong>.</span></p>
+<p><span style="color:#696969;">License: <strong>MIT</strong></span></p>
+<p><span style="color:#696969;">Source code:</span></p>
+<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub – rw-respawn-chest</a></span></p>
+<p><span style="color:#696969;"><strong>Bugs / Feedback</strong></span></p>
+<p><span style="color:#696969;">If something behaves strangely, feel free to post it here.</span></p>
+<p><span style="color:#696969;">If you are reporting a problem with a registered chest, including the output of <strong>/refill-info</strong> can make troubleshooting easier.</span></p>
+<p><span style="color:#696969;">Have fun.</span></p>
+<p><span style="color:#696969;">The admins can finally stop refilling chests by hand.</span></p>
+<p><span style="color:#696969;">Probably.</span></p>
+<woltlab-spoiler data-label="Deutsch">
+	<p><span style="color:#696969;"><strong>Download / Installation</strong></span></p>
+	<p><span style="color:#696969;">Aktuelles Release:</span></p>
+	<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest/releases/latest">Respawn Chest - Latest Release</a></span></p>
+	<p><span style="color:#696969;">Die JAR kommt nach:</span></p>
+	<p><span style="color:#696969;">[tt]./plugins/RespawnChest/RespawnChest.jar[/tt]</span></p>
+	<p><span style="color:#696969;">Danach den Server neu starten.</span></p>
+	<p><span style="color:#696969;">Entwickelt gegen die Rising World Plugin API <strong>0.9.3</strong>.</span></p>
+	<p><span style="color:#696969;">Lizenz: <strong>MIT</strong></span></p>
+	<p><span style="color:#696969;">Quellcode:</span></p>
+	<p><span style="color:#696969;"><a href="https://github.com/HaggerShose/rw-respawn-chest">GitHub – rw-respawn-chest</a></span></p>
+	<p><span style="color:#696969;"><strong>Bugs / Feedback</strong></span></p>
+	<p><span style="color:#696969;">Falls sich eine Kiste merkwürdig verhält, gerne hier melden.</span></p>
+	<p><span style="color:#696969;">Bei Problemen mit einer registrierten Kiste hilft die Ausgabe von <strong>/refill-info</strong> bei der Fehlersuche.</span></p>
+	<p><span style="color:#696969;">Viel Spaß damit.</span></p>
+	<p><span style="color:#696969;">Die Admins dürfen jetzt endlich aufhören, Kisten von Hand aufzufüllen.</span></p>
+	<p><span style="color:#696969;">Vermutlich.</span></p>
+</woltlab-spoiler>
