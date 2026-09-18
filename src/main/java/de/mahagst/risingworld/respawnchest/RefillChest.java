@@ -16,4 +16,18 @@ record RefillChest(
 		Long nextRefill,
 		long createdAt,
 		boolean active) {
+
+	RefillChest withNextRefill(Long next) {
+		return new RefillChest(
+				storageId, objectId, chunkX, chunkY, chunkZ,
+				worldX, worldY, worldZ, objectType, creationDate,
+				intervalSeconds, next, createdAt, active);
+	}
+
+	RefillChest withIntervalSeconds(int interval) {
+		return new RefillChest(
+				storageId, objectId, chunkX, chunkY, chunkZ,
+				worldX, worldY, worldZ, objectType, creationDate,
+				interval, nextRefill, createdAt, active);
+	}
 }

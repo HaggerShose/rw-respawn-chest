@@ -1,41 +1,55 @@
 # AGENTS.md -- rw-respawn-chest
 
-Rising World server plugin (Unity API **0.9.3**): an admin looks at a placed chest and saves its contents as a template. After loot is taken, a one-shot timer starts; when it fires the chest is restored via **RESET**.
+Rising World server plugin (Unity API **0.9.3**): an admin looks at a placed chest and saves its contents as a template. After loot is taken, `next_refill` is set; a global 1s tick (only while something is pending) RESETs due chests.
 
 Chat with the user in German. Code, identifiers, and commits in English. ASCII punctuation in files (`--`, `...`, `->`); German umlauts in prose are fine.
 
 Javadoc: local under `RisingWorld/Data/SDK`, online at <https://javadoc.rising-world.net/latest/>
 
-## Desired flow (v1)
+## Flow
 
 ```text
 1. Admin places a normal chest and fills it
 2. Admin looks at the chest
 3. /make-refill 60
 4. Plugin stores storage/object id + chunk + position + type + creation_date + snapshot + interval
-5. Player takes loot from the chest (into inventory or drop to ground)
-6. Plugin persists next_refill = getIngameTimestamp() + interval; one-shot Timer (if none pending)
-7. Timer -> re-check world time -> identity check -> RESET (clear + template slot-exact)
+5. Player takes loot (inventory or drop to ground)
+6. RAM hit: if idle, persist next_refill = getIngameTimestamp() + interval (do not restart if already pending)
+7. Global 1s tick (only while pending > 0): due chests, max 100/tick
+     getStorage(id) null or identity mismatch -> drop
+     else RESET (clear + template slot-exact) -> next_refill = null
 ```
 
-No continuous poll. Idle chests cost almost nothing. Players install nothing.
+Two runtime states only: **idle** (`next_refill == null`) and **pending**. Players install nothing.
 
-## Commands (v1)
+## Layout
 
-Admins only: `player.isAdmin()` (`Server_Admins` in `server.properties`). Otherwise ignore silently (no reply, do not cancel the event).
+| File                                       | Role                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `RespawnChestPlugin`                       | Lifecycle, admin gate, commands, LoS, loot event stubs                                     |
+| `RefillService`                            | RAM maps, ready+sweep, pending tick, register/update/now/remove/info/list, identity, RESET |
+| `RefillRepository`                         | SQLite only                                                                                |
+| `RefillChest`, `TemplateItem`, `Snapshot`  | Row + capture/restore                                                                      |
+| `LegacyRespawnDbMigration`, `SqliteSchema` | Untouched file migrate / `ensureColumn`                                                    |
+
+No extra packages. No client mods.
+
+## Commands
+
+Admins only: `player.isAdmin()`. Otherwise ignore silently (no reply, do not cancel the event).
 
 Admin commands reply only to the executing admin. Auto-RESET is silent (no chat).
 
-| Command                  | Effect                                                                                                          |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `/make-refill <minutes>` | Register focused chest; contents = template. If already registered: update interval only (pending timer stays). |
-| `/refill-update`         | Save current contents as new template (pending timer stays)                                                     |
-| `/refill-now`            | Immediate RESET to template, clear pending                                                                      |
-| `/refill-remove`         | Remove from DB, kill pending timer                                                                              |
-| `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary                                                  |
-| `/refill-list`           | All registered chests, nearest first (pos, interval, pending remaining, distance)                               |
+| Command                  | Effect                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `/make-refill <minutes>` | Register focused chest; contents = template. If already registered: update interval only (pending stays). |
+| `/refill-update`         | Save current contents as new template (pending stays)                                                     |
+| `/refill-now`            | Immediate RESET to template, clear pending                                                                |
+| `/refill-remove`         | Remove from DB + RAM                                                                                      |
+| `/refill-info`           | Interval, pending yes/no (+ remaining), short template summary                                            |
+| `/refill-list`           | Active registered chests, nearest first (pos, interval, pending remaining, distance)                      |
 
-Focus: `Player.getObjectElementInLineOfSight(5f, callback)`.
+Focus: `Player.getObjectElementInLineOfSight(5f, callback)`. Commands are LoS-only; a missing chest cannot be targeted.
 
 Reject:
 
@@ -43,7 +57,7 @@ Reject:
 - transient storage / no storage
 - `/make-refill` without a minutes argument
 
-Interval in minutes: `0` (or less) -> effective **5 seconds**. Else `minutes * 60`, cap **86400** (one day). Stored as `interval_seconds` (effective delay).
+Interval in minutes: `0` (or less) -> effective **5 seconds**. Else `minutes * 60`, cap **86400** (one day). Stored as `interval_seconds`.
 
 **RESET only.** No REFILL mode. Foreign items disappear on respawn via `clear()`.
 
@@ -68,20 +82,38 @@ getObjectElementInLineOfSight()
 
 Triggers: `PlayerStorageToInventoryEvent` (chest -> inventory) and `PlayerDropItemFromStorageEvent` (chest -> ground). Putting items in does not start a timer.
 
+## Runtime
+
 ```text
-Take event on storage
-  -> RAM Set miss: return (no SQLite)
-  -> findChest; ghost ID: remove from Set
-  -> if next_refill == null: next_refill = getIngameTimestamp() + interval, one-shot timer
-  -> further looting: do not restart timer
-  -> timer: re-check world time (reschedule if still early / pause) -> identity -> RESET -> next_refill = null
+onEnable
+  -> schema + loadMaps (findAll -> RAM Map storageId -> RefillChest)
+  -> register listeners
+  -> wait World.isInitialized() + 5s
+  -> World.getAllStorages() -> HashSet of ids
+  -> drop any registered id not in the set
+  -> migrate legacy unix next_refill to world time (preserve remaining)
+  -> seed pendingById from remaining next_refill; start tick if pending > 0
+
+Loot event
+  -> RAM chests miss: return (no SQLite)
+  -> nextRefill != null: return
+  -> next_refill = getIngameTimestamp() + interval; write DB + RAM
+  -> after sweep: pendingById + ensure tick
+
+Tick (1s, only while pendingById not empty; max 100 dues/tick)
+  -> due = next_refill <= getIngameTimestamp()
+  -> getStorage(id) null or identity mismatch -> drop (DB + RAM)
+  -> else RESET, clear pending
 ```
 
-At most one pending `net.risingworld.api.Timer` per chest (`repetitions = 0`). `/refill-remove` and `onDisable` kill timers.
+RAM:
 
-`next_refill` is world time (`Server.getIngameTimestamp` ms), not wall clock: pause / empty idle does not advance it. Session `Timer` is only a wake-up; due is always re-checked against world time. `created_at` stays unix wall clock.
+- `Map<Long, RefillChest> chests` -- membership + interval + due. Hot path never hits SQLite.
+- `Map<Long, Long> pendingById` -- storageId -> due world-ms. Idle chests absent.
 
-On startup: load registered `storage_id`s into a RAM `Set`, identity-check **all** DB rows and delete orphans (`drop` also removes the id from the Set); migrate legacy unix `next_refill` to world time (preserve remaining); then schedule pending `next_refill` or RESET immediately if due. Register the event listener last.
+One repeating `net.risingworld.api.Timer` (interval 1s, repetitions -1) while pending > 0. No per-chest timers. Due is always world time; the session timer is only a wake-up. `/refill-remove` and `onDisable` kill timers. Pause / empty idle does not advance `next_refill`. `created_at` stays unix wall clock.
+
+While pending, contents are ignored until RESET (further loot does not restart the due time).
 
 ## Persistence: SQLite
 
@@ -89,18 +121,19 @@ One file per world: `getPath() + "/" + World.getName() + ".db"` (path-unsafe cha
 
 One-shot file migrate on enable: if `refill.db` exists and the world db does not, `LegacyRespawnDbMigration` moves it (plus `-wal`/`-shm`). Delete that class once old installs are gone.
 
-A RAM `Set` of `storage_id`s filters loot events (`registeredIds.contains` <=> row in `refill_chests`). SQLite remains source of truth. Sync: add after successful insert, remove in `drop` only.
+Do not change table/column names. `SqliteSchema` and `LegacyRespawnDbMigration` stay as they are.
 
 ```text
 refill_chests:
   storage_id PK, object_id,
-  chunk_x/y/z,              -- for World.getObject
-  world_x/y/z,
-  object_type,              -- Objects.ObjectDefinition.name
+  chunk_x/y/z,              -- register metadata / list
+  world_x/y/z,              -- list distance sort
+  object_type,              -- register metadata (not used for identity)
   creation_date,            -- Storage.getCreationDate()
   interval_seconds,
   next_refill,              -- world ms (Server.getIngameTimestamp), NULL = idle
-  created_at                -- unix wall-clock ms
+  created_at,               -- unix wall-clock ms
+  active                    -- list filter; refill still runs when 0
 
 refill_items:
   storage_id + slot PK,
@@ -118,22 +151,14 @@ No schema migration runner. `CREATE TABLE IF NOT EXISTS` is the target schema. A
 
 Copy [`_tools/templates/SqliteSchema.java`](../_tools/templates/SqliteSchema.java) into the plugin package and change the package line. `ensureColumn` is idempotent (`PRAGMA table_info`, then `ALTER TABLE ... ADD COLUMN` only if missing). Keep the call permanently -- it also covers an old db copied onto a new server.
 
-### Identity check
+### Identity
 
-On plugin start over **all** DB rows, and before RESET / before command targets on already registered chests:
+Used on due RESET and focused commands that already have a live storage:
 
-1. `World.getStorage(storage_id)` missing -> **keep** the row (UNCERTAIN). Never treat null as proof the chest is gone. Pending refill: silent retry every 30s.
-2. Storage transient, or `storage.getCreationDate()` != saved -> delete.
-3. `World.getObject(object_id, chunk_x, chunk_y, chunk_z)` when present: type must match, distance to saved position **<= 5** blocks; else delete. Position null while object loaded -> keep (UNCERTAIN), retry if pending.
-4. ObjectElement null (e.g. chunk unloaded) but storage + creation_date OK: treat as same chest, keep entry / allow RESET.
+1. `World.getStorage(storage_id)` missing -> **drop** (startup sweep via `getAllStorages`, or mid-session when a pending due fires).
+2. Storage transient, or `storage.getCreationDate()` != saved -> drop.
 
-No blind RESET onto a different chest. Truly deleted chests may leave idle DB orphans; that is preferred over false deletes.
-
-## Scope
-
-v1: one plugin class (commands + loot events + timers), Snapshot, SQLite (`RefillRepository`), identity cleanup.
-
-No framework layers, no client mods.
+Chunk/object fields (`object_id`, chunk, world pos, `object_type`) stay in the DB for list/display and register metadata; they are not part of runtime identity. No `UNCERTAIN` retry loop.
 
 ## Build / Setup
 
@@ -158,7 +183,7 @@ PowerShell: always quote `-D...` args.
 ## Agent notes
 
 - Read Javadoc 0.9.3 before API calls.
-- Storage id == object id for chests still requires null and identity checks.
-- No global continuous poll. No REFILL mode. Drop only on clear identity mismatch (not on null storage).
+- Storage id == object id for chests still requires null and identity checks before RESET.
+- No per-chest timers. No REFILL mode. Drop on missing storage (after ready) and on identity mismatch.
 - Auto-RESET stays silent. Commands only for server admins.
-- Loot hot path: RAM `registeredIds` first; SQLite only on hit. Keep Set in sync via insert + `drop` only.
+- Loot hot path: RAM `chests` then idle check; SQLite only when arming pending.
