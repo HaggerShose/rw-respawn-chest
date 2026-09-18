@@ -4,7 +4,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import net.risingworld.api.database.Database;
 
@@ -60,21 +59,6 @@ final class RefillRepository {
 		SqliteSchema.ensureColumn(database, "refill_chests", "active", "INTEGER NOT NULL DEFAULT 1");
 	}
 
-	Optional<RefillChest> findChest(long storageId) {
-		var sql = "SELECT * FROM refill_chests WHERE storage_id = ?";
-		try (var prep = database.getConnection().prepareStatement(sql)) {
-			prep.setLong(1, storageId);
-			try (var result = prep.executeQuery()) {
-				if (result.next()) {
-					return Optional.of(readChest(result));
-				}
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-		return Optional.empty();
-	}
-
 	List<RefillChest> findAll() {
 		var chests = new ArrayList<RefillChest>();
 		var sql = "SELECT * FROM refill_chests";
@@ -89,6 +73,11 @@ final class RefillRepository {
 		return chests;
 	}
 
+	/**
+	 * Load the slot-exact template for one chest.
+	 *
+	 * @return items (possibly empty), or {@code null} if the query failed
+	 */
 	List<TemplateItem> findItems(long storageId) {
 		var items = new ArrayList<TemplateItem>();
 		var sql = "SELECT * FROM refill_items WHERE storage_id = ? ORDER BY slot";
@@ -112,6 +101,7 @@ final class RefillRepository {
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
+			return null;
 		}
 		return items;
 	}
@@ -208,8 +198,9 @@ final class RefillRepository {
 	 *
 	 * @param nextRefill world-time ms when due ({@link net.risingworld.api.Server#getIngameTimestamp}),
 	 *                   or null for idle (no timer pending)
+	 * @return {@code false} if the write failed
 	 */
-	void setNextRefill(long storageId, Long nextRefill) {
+	boolean setNextRefill(long storageId, Long nextRefill) {
 		var sql = "UPDATE refill_chests SET next_refill = ? WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {
 			if (nextRefill == null) {
@@ -219,30 +210,45 @@ final class RefillRepository {
 			}
 			prep.setLong(2, storageId);
 			prep.executeUpdate();
+			return true;
 		} catch (SQLException e) {
 			e.printStackTrace();
+			return false;
 		}
 	}
 
-	void setIntervalSeconds(long storageId, int intervalSeconds) {
+	/**
+	 * Update the refill interval. Pending due time is unchanged.
+	 *
+	 * @return {@code false} if the write failed
+	 */
+	boolean setIntervalSeconds(long storageId, int intervalSeconds) {
 		var sql = "UPDATE refill_chests SET interval_seconds = ? WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {
 			prep.setInt(1, intervalSeconds);
 			prep.setLong(2, storageId);
 			prep.executeUpdate();
+			return true;
 		} catch (SQLException e) {
 			e.printStackTrace();
+			return false;
 		}
 	}
 
-	/** CASCADE deletes refill_items via FK. */
-	void delete(long storageId) {
+	/**
+	 * CASCADE deletes refill_items via FK.
+	 *
+	 * @return {@code false} if the write failed
+	 */
+	boolean delete(long storageId) {
 		var sql = "DELETE FROM refill_chests WHERE storage_id = ?";
 		try (var prep = database.getConnection().prepareStatement(sql)) {
 			prep.setLong(1, storageId);
 			prep.executeUpdate();
+			return true;
 		} catch (SQLException e) {
 			e.printStackTrace();
+			return false;
 		}
 	}
 

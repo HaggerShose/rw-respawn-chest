@@ -20,7 +20,7 @@ import net.risingworld.api.objects.world.ObjectElement;
  */
 public class RespawnChestPlugin extends Plugin implements Listener {
 	/** Max LoS focus distance in world units. */
-	static final float LOS_DISTANCE = 5f;
+	static final float LOS_DISTANCE = 16f;
 
 	private Database database;
 	private RefillService refill;
@@ -79,32 +79,49 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 			return;
 		}
 		event.setCancelled(true);
-		switch (cmd) {
-			case "/make-refill" -> makeRefill(player, args);
-			case "/refill-update" -> withFocused(player, refill::update);
-			case "/refill-now" -> withFocused(player, refill::now);
-			case "/refill-remove" -> withFocused(player, (p, object, storage) -> refill.remove(p, storage));
-			case "/refill-info" -> withFocused(player, refill::info);
-			case "/refill-list" -> refill.list(player);
-			default -> {
+		enqueue(() -> {
+			if (refill == null) {
+				return;
 			}
-		}
+			switch (cmd) {
+				case "/make-refill" -> makeRefill(player, args);
+				case "/refill-update" -> withFocused(player, refill::update);
+				case "/refill-now" -> withFocused(player, refill::now);
+				case "/refill-remove" -> withFocused(player, (p, object, storage) -> refill.remove(p, storage));
+				case "/refill-info" -> withFocused(player, refill::info);
+				case "/refill-list" -> refill.list(player);
+				default -> {
+				}
+			}
+		});
 	}
 
 	/** Chest -> player inventory. Putting items into the chest never starts a timer. */
 	@EventMethod
 	public void onStorageToInventory(PlayerStorageToInventoryEvent event) {
-		if (!event.isCancelled() && refill != null) {
-			refill.onLoot(event.getStorage());
+		if (event.isCancelled() || refill == null) {
+			return;
 		}
+		Storage storage = event.getStorage();
+		if (storage == null) {
+			return;
+		}
+		long storageId = storage.getID();
+		enqueue(() -> refill.onLoot(storageId));
 	}
 
 	/** Chest -> ground drop (separate event from inventory take). */
 	@EventMethod
 	public void onDropFromStorage(PlayerDropItemFromStorageEvent event) {
-		if (!event.isCancelled() && refill != null) {
-			refill.onLoot(event.getStorage());
+		if (event.isCancelled() || refill == null) {
+			return;
 		}
+		Storage storage = event.getStorage();
+		if (storage == null) {
+			return;
+		}
+		long storageId = storage.getID();
+		enqueue(() -> refill.onLoot(storageId));
 	}
 
 	private static boolean isOurs(String cmd) {
@@ -157,7 +174,7 @@ public class RespawnChestPlugin extends Plugin implements Listener {
 				player.sendTextMessage("Transient storage is not supported.");
 				return;
 			}
-			handler.handle(player, object, storage);
+			enqueue(() -> handler.handle(player, object, storage));
 		});
 	}
 

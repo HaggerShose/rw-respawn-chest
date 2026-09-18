@@ -14,10 +14,11 @@ Javadoc: local under `RisingWorld/Data/SDK`, online at <https://javadoc.rising-w
 3. /make-refill 60
 4. Plugin stores storage/object id + chunk + position + type + creation_date + snapshot + interval
 5. Player takes loot (inventory or drop to ground)
-6. RAM hit: if idle, persist next_refill = getIngameTimestamp() + interval (do not restart if already pending)
-7. Global 1s tick (only while pending > 0): due chests, max 100/tick
+6. RAM hit: if idle, set next_refill = getIngameTimestamp() + interval (do not restart if already pending)
+7. Global 1s tick (only while pending > 0): due chests, stop after 250 ms of RESET work
      getStorage(id) null or identity mismatch -> drop
-     else RESET (clear + template slot-exact) -> next_refill = null
+     else RESET from RAM template (clear + slot-exact) -> next_refill = null
+     restore failure: retry, drop after 3 failed attempts
 ```
 
 Two runtime states only: **idle** (`next_refill == null`) and **pending**. Players install nothing.
@@ -27,7 +28,7 @@ Two runtime states only: **idle** (`next_refill == null`) and **pending**. Playe
 | File                                       | Role                                                                                       |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `RespawnChestPlugin`                       | Lifecycle, admin gate, commands, LoS, loot event stubs                                     |
-| `RefillService`                            | RAM maps, ready+sweep, pending tick, register/update/now/remove/info/list, identity, RESET |
+| `RefillService`                            | RAM chests+templates, ready+sweep, pending tick, register/update/now/remove/info/list, identity, RESET |
 | `RefillRepository`                         | SQLite only                                                                                |
 | `RefillChest`, `TemplateItem`, `Snapshot`  | Row + capture/restore                                                                      |
 | `LegacyRespawnDbMigration`, `SqliteSchema` | Untouched file migrate / `ensureColumn`                                                    |
@@ -57,7 +58,7 @@ Reject:
 - transient storage / no storage
 - `/make-refill` without a minutes argument
 
-Interval in minutes: `0` (or less) -> effective **5 seconds**. Else `minutes * 60`, cap **86400** (one day). Stored as `interval_seconds`.
+Interval in minutes: `0` (or less) -> effective **5 seconds**. Else `minutes * 60L`, cap **86400** (one day). Stored as `interval_seconds`.
 
 **RESET only.** No REFILL mode. Foreign items disappear on respawn via `clear()`.
 
@@ -76,7 +77,7 @@ getObjectElementInLineOfSight()
 - Item subtypes: `Item`, `Item.ObjectItem`, `Item.ConstructionItem`, `Item.ClothingItem` -- matching `Storage.add*ToSlot`.
 - `Item.BlueprintItem`: no add API on Storage -- skip slot, server log.
 - After `add*ToSlot`: set `durability`, `status`, `value`, `modifier` on the returned item.
-- RESET: `storage.clear()` + template slot-exact.
+- RESET: `storage.clear()` + RAM template slot-exact. Missing/empty template does not clear.
 - Do not use `ObjectElement.setAttribute` for persistence.
 - Commands: `PlayerCommandEvent`; on admin handling `setCancelled(true)`.
 
@@ -86,7 +87,8 @@ Triggers: `PlayerStorageToInventoryEvent` (chest -> inventory) and `PlayerDropIt
 
 ```text
 onEnable
-  -> schema + loadMaps (findAll -> RAM Map storageId -> RefillChest)
+  -> schema + loadMaps (findAll + findItems -> RAM chests + templates)
+  -> skip / drop rows with empty templates; skip a chest for this session if item query fails
   -> register listeners
   -> wait World.isInitialized() + 5s
   -> World.getAllStorages() -> HashSet of ids
@@ -94,21 +96,25 @@ onEnable
   -> migrate legacy unix next_refill to world time (preserve remaining)
   -> seed pendingById from remaining next_refill; start tick if pending > 0
 
-Loot event
-  -> RAM chests miss: return (no SQLite)
+Loot / command / tick
+  -> read event/LoS data, then plugin.enqueue (one thread mutates maps)
+  -> Loot: RAM chests miss: return (no SQLite)
   -> nextRefill != null: return
-  -> next_refill = getIngameTimestamp() + interval; write DB + RAM
+  -> RAM next_refill = getIngameTimestamp() + interval; persist DB (log on fail, countdown still runs)
   -> after sweep: pendingById + ensure tick
 
-Tick (1s, only while pendingById not empty; max 100 dues/tick)
+Tick (1s, only while pendingById not empty; 250 ms RESET budget)
   -> due = next_refill <= getIngameTimestamp()
   -> getStorage(id) null or identity mismatch -> drop (DB + RAM)
-  -> else RESET, clear pending
+  -> else RESET from RAM template
+  -> restore fail: retry (pending stays); after 3 failures drop + log
+  -> restore ok: clear pending (if that DB write fails, pending stays -> RESET again next tick)
 ```
 
 RAM:
 
-- `Map<Long, RefillChest> chests` -- membership + interval + due. Hot path never hits SQLite.
+- `Map<Long, RefillChest> chests` -- membership + interval + due.
+- `Map<Long, List<TemplateItem>> templates` -- slot-exact snapshot. RESET and `/refill-info` never read items from SQLite.
 - `Map<Long, Long> pendingById` -- storageId -> due world-ms. Idle chests absent.
 
 One repeating `net.risingworld.api.Timer` (interval 1s, repetitions -1) while pending > 0. No per-chest timers. Due is always world time; the session timer is only a wake-up. `/refill-remove` and `onDisable` kill timers. Pause / empty idle does not advance `next_refill`. `created_at` stays unix wall clock.
@@ -186,4 +192,6 @@ PowerShell: always quote `-D...` args.
 - Storage id == object id for chests still requires null and identity checks before RESET.
 - No per-chest timers. No REFILL mode. Drop on missing storage (after ready) and on identity mismatch.
 - Auto-RESET stays silent. Commands only for server admins.
-- Loot hot path: RAM `chests` then idle check; SQLite only when arming pending.
+- Loot hot path: RAM `chests` then idle check; SQLite only when arming pending (best-effort persist).
+- Templates live in RAM after enable / `/refill-update`. RESET does not query `refill_items`.
+- Loot, commands, and the tick mutate service maps only via `plugin.enqueue`.

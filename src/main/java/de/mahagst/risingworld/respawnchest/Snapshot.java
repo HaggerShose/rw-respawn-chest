@@ -9,7 +9,7 @@ import net.risingworld.api.objects.Storage;
 
 /**
  * Capture / restore chest contents slot-exact.
- * RESET always clear()s first so foreign items disappear.
+ * RESET clear()s first so foreign items disappear, unless the template is missing or empty.
  */
 final class Snapshot {
 	private Snapshot() {
@@ -33,7 +33,15 @@ final class Snapshot {
 		return template;
 	}
 
-	static void restore(Storage storage, List<TemplateItem> template) {
+	/**
+	 * RESET: {@code clear()} then write template slots.
+	 *
+	 * @return {@code false} if the template is missing or empty (storage left untouched)
+	 */
+	static boolean restore(Storage storage, List<TemplateItem> template) {
+		if (template == null || template.isEmpty()) {
+			return false;
+		}
 		storage.clear();
 		for (TemplateItem saved : template) {
 			Item created = addToSlot(storage, saved);
@@ -46,6 +54,7 @@ final class Snapshot {
 			created.setValue(saved.value());
 			created.setModifier(parseModifier(saved.modifier()));
 		}
+		return true;
 	}
 
 	private static TemplateItem captureItem(int slot, Item item) {

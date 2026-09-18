@@ -18,20 +18,23 @@ import net.risingworld.api.objects.world.ObjectElement;
 import net.risingworld.api.utils.Vector3f;
 
 /**
- * Refill domain: RAM chest map, pending dues, startup orphan sweep, global tick, RESET.
- * Idle ({@code nextRefill == null}) vs pending only. Loot hot path never hits SQLite.
+ * Refill domain: RAM chest map, RAM templates, pending dues, startup orphan sweep, global tick, RESET.
+ * Idle ({@code nextRefill == null}) vs pending only. Hot path never hits SQLite for reads.
  * Pending due times use {@link Server#getIngameTimestamp()} (world time); pause does not advance them.
+ * Mutating entry points run on the plugin enqueue thread.
  */
 final class RefillService {
 	/** Cap for interval after converting minutes (24h). */
 	static final int MAX_INTERVAL_SECONDS = 24 * 60 * 60;
 	/** Effective delay when /make-refill gets 0 or negative minutes (quick test). */
 	static final int MIN_TEST_SECONDS = 5;
-	/** Max RESET/drop work per 1s tick when many chests are due at once. */
-	static final int MAX_DUE_PER_TICK = 100;
+	/** Max RESET work per 1s tick when many chests are due at once. */
+	private static final long TICK_BUDGET_NS = 250_000_000L;
 	static final float TICK_SECONDS = 1f;
 	/** Extra wait after {@link World#isInitialized()} before orphan sweep. */
 	static final float READY_DELAY_SECONDS = 5f;
+	/** Failed restores before dropping the registration. */
+	private static final int MAX_RESTORE_ATTEMPTS = 3;
 	/**
 	 * Values at or above this are treated as legacy unix {@code next_refill}
 	 * (pre-ingame-timestamp). ~2001-09-09 in wall-clock ms; playtime ms stay far below.
@@ -43,8 +46,12 @@ final class RefillService {
 
 	/** Full refill_chests rows. Mutate on make / interval / pending / drop. */
 	private final Map<Long, RefillChest> chests = new HashMap<>();
+	/** storageId -> slot-exact template. Loaded on enable / replaced on update. */
+	private final Map<Long, List<TemplateItem>> templates = new HashMap<>();
 	/** storageId -> due world-ms. Idle chests are absent. */
 	private final Map<Long, Long> pendingById = new HashMap<>();
+	/** Consecutive failed restores; cleared on success or drop. */
+	private final Map<Long, Integer> restoreFailures = new HashMap<>();
 
 	/** False after {@link #disable()} so leftover enqueue callbacks no-op. */
 	private boolean running;
@@ -61,13 +68,27 @@ final class RefillService {
 	}
 
 	/**
-	 * Load {@link #chests} from one {@code findAll}. Does not start timers or drop orphans.
+	 * Load {@link #chests} and {@link #templates} from DB. Does not start timers or drop orphans.
+	 * Empty templates are deleted; a failed item query skips that chest for this session.
 	 */
 	void loadMaps() {
 		chests.clear();
+		templates.clear();
 		pendingById.clear();
+		restoreFailures.clear();
 		for (RefillChest chest : repository.findAll()) {
+			List<TemplateItem> items = repository.findItems(chest.storageId());
+			if (items == null) {
+				System.out.println("[RespawnChest] Failed to load template for #" + chest.storageId());
+				continue;
+			}
+			if (items.isEmpty()) {
+				System.out.println("[RespawnChest] Empty template for #" + chest.storageId() + ", dropping");
+				repository.delete(chest.storageId());
+				continue;
+			}
 			chests.put(chest.storageId(), chest);
+			templates.put(chest.storageId(), items);
 		}
 	}
 
@@ -95,18 +116,19 @@ final class RefillService {
 		sweepTimer = null;
 		tickTimer = null;
 		chests.clear();
+		templates.clear();
 		pendingById.clear();
+		restoreFailures.clear();
 	}
 
 	/**
 	 * First loot on an idle registered chest arms pending. Further loot while pending is ignored.
-	 * No SQLite on the miss / already-pending path.
+	 * RAM is updated first; a failed persist is logged and the session countdown still runs.
 	 */
-	void onLoot(Storage storage) {
-		if (!running || storage == null) {
+	void onLoot(long storageId) {
+		if (!running) {
 			return;
 		}
-		long storageId = storage.getID();
 		RefillChest chest = chests.get(storageId);
 		if (chest == null) {
 			return;
@@ -115,11 +137,13 @@ final class RefillService {
 			return;
 		}
 		long due = worldNow() + chest.intervalSeconds() * 1000L;
-		repository.setNextRefill(storageId, due);
 		chests.put(storageId, chest.withNextRefill(due));
 		if (swept) {
 			pendingById.put(storageId, due);
 			ensureTick();
+		}
+		if (!repository.setNextRefill(storageId, due)) {
+			System.out.println("[RespawnChest] Failed to persist next_refill for #" + storageId);
 		}
 	}
 
@@ -127,7 +151,11 @@ final class RefillService {
 		if (minutes <= 0) {
 			return MIN_TEST_SECONDS;
 		}
-		return Math.min(minutes * 60, MAX_INTERVAL_SECONDS);
+		long seconds = minutes * 60L;
+		if (seconds > MAX_INTERVAL_SECONDS) {
+			return MAX_INTERVAL_SECONDS;
+		}
+		return (int) seconds;
 	}
 
 	void register(Player player, ObjectElement object, Storage storage, int intervalSeconds, boolean active) {
@@ -162,6 +190,7 @@ final class RefillService {
 			return;
 		}
 		chests.put(chest.storageId(), chest);
+		templates.put(chest.storageId(), items);
 		player.sendTextMessage("Refill chest created. Interval: " + intervalSeconds + "s");
 	}
 
@@ -175,7 +204,10 @@ final class RefillService {
 			player.sendTextMessage("Interval not changed (already " + intervalSeconds + "s).");
 			return;
 		}
-		repository.setIntervalSeconds(chest.storageId(), intervalSeconds);
+		if (!repository.setIntervalSeconds(chest.storageId(), intervalSeconds)) {
+			player.sendTextMessage("Could not save interval.");
+			return;
+		}
 		chests.put(chest.storageId(), chest.withIntervalSeconds(intervalSeconds));
 		player.sendTextMessage("Interval updated to " + intervalSeconds + "s.");
 	}
@@ -194,6 +226,7 @@ final class RefillService {
 			player.sendTextMessage("Could not save template.");
 			return;
 		}
+		templates.put(storage.getID(), items);
 		player.sendTextMessage("Template updated.");
 	}
 
@@ -202,7 +235,10 @@ final class RefillService {
 		if (chest == null) {
 			return;
 		}
-		restore(chest, storage);
+		if (!restore(chest, storage)) {
+			player.sendTextMessage("Could not reset chest.");
+			return;
+		}
 		player.sendTextMessage("Chest reset.");
 	}
 
@@ -211,7 +247,11 @@ final class RefillService {
 			player.sendTextMessage("Chest is not registered.");
 			return;
 		}
-		drop(storage.getID());
+		if (!repository.delete(storage.getID())) {
+			player.sendTextMessage("Could not remove refill chest.");
+			return;
+		}
+		evict(storage.getID());
 		player.sendTextMessage("Chest removed.");
 	}
 
@@ -220,10 +260,14 @@ final class RefillService {
 		if (chest == null) {
 			return;
 		}
-		List<TemplateItem> items = repository.findItems(chest.storageId());
+		List<TemplateItem> items = templates.get(chest.storageId());
 		int amount = 0;
-		for (TemplateItem item : items) {
-			amount += item.stack();
+		int stacks = 0;
+		if (items != null) {
+			stacks = items.size();
+			for (TemplateItem item : items) {
+				amount += item.stack();
+			}
 		}
 		boolean pending = chest.nextRefill() != null;
 		String rest = "-";
@@ -233,7 +277,7 @@ final class RefillService {
 		player.sendTextMessage(
 				"Refill Chest: interval " + chest.intervalSeconds() + "s, pending "
 						+ (pending ? "yes" : "no") + ", remaining: " + rest
-						+ ", template: " + items.size() + " stacks / " + amount + " items");
+						+ ", template: " + stacks + " stacks / " + amount + " items");
 	}
 
 	void list(Player player) {
@@ -326,6 +370,11 @@ final class RefillService {
 			return;
 		}
 		sweepTimer = null;
+		if (chests.isEmpty()) {
+			swept = true;
+			System.out.println("[RespawnChest] Startup sweep: no registered chests");
+			return;
+		}
 		Set<Long> live = liveStorageIds();
 		int dropped = 0;
 		for (Long id : new ArrayList<>(chests.keySet())) {
@@ -372,17 +421,18 @@ final class RefillService {
 			return;
 		}
 		long now = worldNow();
-		List<Long> dueIds = new ArrayList<>(MAX_DUE_PER_TICK);
+		long deadline = System.nanoTime() + TICK_BUDGET_NS;
+		List<Long> dueIds = new ArrayList<>();
 		for (Map.Entry<Long, Long> entry : pendingById.entrySet()) {
 			if (entry.getValue() <= now) {
 				dueIds.add(entry.getKey());
-				if (dueIds.size() >= MAX_DUE_PER_TICK) {
-					break;
-				}
 			}
 		}
 		for (Long storageId : dueIds) {
 			onDue(storageId);
+			if (System.nanoTime() >= deadline) {
+				break;
+			}
 		}
 		if (pendingById.isEmpty()) {
 			stopTick();
@@ -403,14 +453,35 @@ final class RefillService {
 		restore(chest, storage);
 	}
 
-	/** Silent RESET: clear storage, write template slots, clear pending. */
-	private void restore(RefillChest chest, Storage storage) {
-		Snapshot.restore(storage, repository.findItems(chest.storageId()));
+	/**
+	 * RESET from the RAM template. On failure, retry on later ticks;
+	 * after {@link #MAX_RESTORE_ATTEMPTS} drops the registration.
+	 *
+	 * @return {@code true} if the storage was reset
+	 */
+	private boolean restore(RefillChest chest, Storage storage) {
+		List<TemplateItem> items = templates.get(chest.storageId());
+		if (!Snapshot.restore(storage, items)) {
+			int attempts = restoreFailures.getOrDefault(chest.storageId(), 0) + 1;
+			if (attempts >= MAX_RESTORE_ATTEMPTS) {
+				System.out.println("[RespawnChest] Restore failed " + attempts
+						+ " times for #" + chest.storageId() + ", dropping");
+				drop(chest.storageId());
+			} else {
+				restoreFailures.put(chest.storageId(), attempts);
+			}
+			return false;
+		}
+		restoreFailures.remove(chest.storageId());
 		clearPending(chest.storageId());
+		return true;
 	}
 
 	private void clearPending(long storageId) {
-		repository.setNextRefill(storageId, null);
+		if (!repository.setNextRefill(storageId, null)) {
+			System.out.println("[RespawnChest] Failed to clear next_refill for #" + storageId);
+			return;
+		}
 		RefillChest chest = chests.get(storageId);
 		if (chest != null) {
 			chests.put(storageId, chest.withNextRefill(null));
@@ -421,9 +492,19 @@ final class RefillService {
 		}
 	}
 
+	/** Delete DB row (best effort) and evict RAM. Used for orphans and failed restores. */
 	private void drop(long storageId) {
-		repository.delete(storageId);
+		if (!repository.delete(storageId)) {
+			System.out.println("[RespawnChest] Failed to delete #" + storageId);
+		}
+		evict(storageId);
+	}
+
+	/** RAM-only removal after a successful admin delete, or as the last step of {@link #drop}. */
+	private void evict(long storageId) {
 		chests.remove(storageId);
+		templates.remove(storageId);
+		restoreFailures.remove(storageId);
 		pendingById.remove(storageId);
 		if (pendingById.isEmpty()) {
 			stopTick();
@@ -487,7 +568,9 @@ final class RefillService {
 		}
 		long remainingMs = Math.max(0L, next - System.currentTimeMillis());
 		long converted = worldNow() + remainingMs;
-		repository.setNextRefill(storageId, converted);
+		if (!repository.setNextRefill(storageId, converted)) {
+			System.out.println("[RespawnChest] Failed to persist migrated next_refill for #" + storageId);
+		}
 		RefillChest chest = chests.get(storageId);
 		if (chest != null) {
 			chests.put(storageId, chest.withNextRefill(converted));
